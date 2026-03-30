@@ -44,6 +44,7 @@ export default function PollsterDashboard() {
   const [polls, setPolls] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [copiedId, setCopiedId] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -88,6 +89,12 @@ export default function PollsterDashboard() {
   const dynamicPieData = latestPoll
     ? latestPoll.options?.map((opt: any) => ({ name: opt.text, value: opt.votes })) || []
     : pieData;
+
+  const handleCopy = (id: number) => {
+    navigator.clipboard.writeText(window.location.origin + '/anket/' + id)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
@@ -263,9 +270,15 @@ export default function PollsterDashboard() {
                 >
                   {status}
                 </span>
+                <button
+                  onClick={() => handleCopy(poll.id)}
+                  className="text-xs px-2.5 py-1 rounded-md bg-secondary/50 text-secondary-foreground hover:bg-secondary transition-colors font-medium border border-border"
+                >
+                  {copiedId === poll.id ? "✅ Kopyalandı!" : "🔗 Linki Kopyala"}
+                </button>
                 <Link
                   href={`/pollster/results?poll=${poll.id}`}
-                  className="text-xs text-primary hover:underline font-medium"
+                  className="text-xs text-primary hover:underline font-medium ml-2"
                 >
                   Görüntüle
                 </Link>

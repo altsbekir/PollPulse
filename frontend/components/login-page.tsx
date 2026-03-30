@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { BarChart3, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,9 @@ interface LoginPageProps {
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectUrl = searchParams.get('redirect')
+  
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<"pollster" | "user">("user")
@@ -69,7 +72,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         localStorage.setItem("user", JSON.stringify(data.user))
         
         // Redirect based on role
-        if (data.user.role === "Pollster") {
+        if (redirectUrl) {
+          router.push(redirectUrl)
+        } else if (data.user.role === "Pollster") {
           router.push("/pollster")
         } else {
           router.push("/user")

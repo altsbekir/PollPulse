@@ -160,6 +160,17 @@ def get_all_polls(db: Session = Depends(get_db)):
     return valid_polls
 
 
+@app.get("/api/polls/single/{poll_id}", response_model=schemas.PollResponse)
+def get_single_poll(poll_id: int, db: Session = Depends(get_db)):
+    poll = db.query(models.Poll).filter(models.Poll.id == poll_id).first()
+    if not poll:
+        raise HTTPException(status_code=404, detail="Anket bulunamadı veya silinmiş olabilir.")
+    
+    options = db.query(models.Option).filter(models.Option.poll_id == poll_id).all()
+    setattr(poll, "options", options)
+    return poll
+
+
 @app.post("/api/vote")
 def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
     existing_vote = db.query(models.Vote).filter(
