@@ -58,3 +58,7 @@ class VoteCreate(BaseModel):
     user_id: int
     poll_id: int
     option_id: int
+
+
+class AIPollRequest(BaseModel):
+    topic: str

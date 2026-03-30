@@ -1,6 +1,12 @@
 from typing import List
 from collections import defaultdict
 from datetime import datetime, timedelta
+import os
+import re
+import random
+import json as _json
+from dotenv import load_dotenv
+import google.generativeai as genai
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -9,6 +15,9 @@ from passlib.context import CryptContext
 from database import SessionLocal, engine
 import models
 import schemas
+
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -31,6 +40,100 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# AI Poll Generation helpers
+# ---------------------------------------------------------------------------
+
+_AI_Q_TEMPLATES = [
+    "{topic} konusunda en önemli faktör sizce nedir?",
+    "{topic} alanında karşılaşılan en büyük zorluk nedir?",
+    "{topic} sürecinde öncelikli olarak neye odaklanırsınız?",
+    "{topic} ile ilgili en etkili yaklaşım sizce hangisidir?",
+    "{topic} hakkındaki görüşünüz nedir?",
+]
+
+_AI_OPT_TEMPLATES = [
+    ["Maliyet ve bütçe yönetimi", "Teknik altyapı", "İnsan kaynakları", "Strateji ve planlama"],
+    ["Verimlilik artışı", "Risk azaltma", "Yenilik ve Ar-Ge", "Müşteri memnuniyeti"],
+    ["Evet, kesinlikle destekliyorum", "Kısmen destekliyorum", "Kararasızım", "Desteklemiyorum"],
+    ["Tamamen otomatik sistemler", "Yarı otomatik hibrit yaklaşım", "İnsan odaklı süreçler", "Durum bazlı karma model"],
+    ["Kısa vadeli kazanımlar", "Uzun vadeli sürdürülebilirlik", "Anlık operasyonel ihtiyaçlar", "Stratejik büyüme hedefleri"],
+    ["Yaygınlaşması çok kolay olacak", "Belirli sektörlerle sınırlı kalacak", "Henüz olgunlaşmadı", "Artık olmazsa olmaz hâle geldi"],
+]
+
+
+def _template_generation(topic: str) -> dict:
+    question = random.choice(_AI_Q_TEMPLATES).format(topic=topic)
+    options = list(random.choice(_AI_OPT_TEMPLATES))
+    return {"question": question, "options": options}
+
+
+def _try_llm_generation(topic: str) -> dict | None:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=(
+                "Sen bir anket oluşturma asistanısın. "
+                "Kullanıcının verdiği konuya göre yaratici bir anket sorusu ve 4 seçenek üreti̇rsi̇n. "
+                "Yanıtını her zaman SADECE geçerli bir JSON nesnesi olarak ver, "
+                "başka hiçbir açıklama veya markdown işareti ekleme. "
+                'Format: {"question": "...", "options": ["...", "...", "...", "..."]}'
+            ),
+        )
+
+        prompt = (
+            f"Konu: {topic}. "
+            "Bu konuyla ilişkili yaratıcı bir anket sorusu ve 4 seçenek oluştur. "
+            "Yanıtı sadece şu JSON formatında ver: "
+            '{"question": "...", "options": ["...", "...", "...", "..."]}. '
+            "Dil: Türkçe."
+        )
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+
+        # Strip markdown code fences if the model adds them
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+            text = re.sub(r"```$", "", text).strip()
+
+        # Extract the first JSON object found in the response
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+
+        data = _json.loads(match.group())
+
+        if (
+            isinstance(data.get("question"), str)
+            and isinstance(data.get("options"), list)
+            and len(data["options"]) >= 2
+        ):
+            return data
+
+        return None
+
+    except Exception:
+        return None
+
+
+@app.post("/api/generate-ai-poll")
+def generate_ai_poll(request: schemas.AIPollRequest):
+    topic = request.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Konu boş olamaz.")
+
+    result = _try_llm_generation(topic)
+    if result and "question" in result and "options" in result:
+        return result
+
+    return _template_generation(topic)
 
 
 @app.get("/")
