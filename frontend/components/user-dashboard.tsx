@@ -84,14 +84,18 @@ export default function UserDashboard() {
         return
       }
 
+      const data = await res.json()
+      if (data.streak_count !== undefined) {
+        const updatedUser = { ...user, streak_count: data.streak_count }
+        setUser(updatedUser)
+        localStorage.setItem("user", JSON.stringify(updatedUser))
+      }
       setVoted((prev) => ({ ...prev, [pollId]: optionId }))
       await fetchPolls()
     } catch (err: any) {
       alert(err.message)
     }
   }
-
-  const streakDays = 5
 
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
@@ -108,7 +112,7 @@ export default function UserDashboard() {
         <div className="shrink-0 flex items-center gap-2 bg-orange-500/15 border border-orange-500/30 px-4 py-2 rounded-xl">
           <Flame className="w-5 h-5 text-orange-400" />
           <div>
-            <p className="text-sm font-bold text-orange-400">{streakDays} Günlük Seri</p>
+            <p className="text-sm font-bold text-orange-400">{user?.streak_count ?? 0} Günlük Seri</p>
             <p className="text-xs text-orange-400/70">Devam ettirin!</p>
           </div>
         </div>

@@ -16,6 +16,13 @@ import {
 } from "recharts"
 import { PlusCircle, BarChart3, Users, Activity, ArrowUpRight, CheckCircle2, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
@@ -29,6 +36,7 @@ export default function PollsterDashboard() {
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [statsData, setStatsData] = useState<any>(null)
+  const [selectedPollId, setSelectedPollId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -55,6 +63,9 @@ export default function PollsterDashboard() {
         if (statsRes.ok) {
           const stats = await statsRes.json()
           setStatsData(stats)
+          if (stats.polls_list?.length) {
+            setSelectedPollId(String(stats.polls_list[0].id))
+          }
         }
       } catch (err: any) {
         setError(err.message)
@@ -91,8 +102,9 @@ export default function PollsterDashboard() {
     { label: "Aktif Kullanıcı", value: (statsData?.total_voters ?? 0).toLocaleString("tr-TR"), icon: Users, change: "Tüm anketlerden" },
   ];
 
-  const dynamicPieData = statsData?.latest_poll_data?.options?.length
-    ? statsData.latest_poll_data.options
+  const selectedPoll = statsData?.polls_list?.find((p: any) => String(p.id) === selectedPollId)
+  const dynamicPieData = selectedPoll?.options?.length
+    ? selectedPoll.options
     : [{ name: "Veri yok", value: 1 }];
 
   const handleCopy = (id: number) => {
@@ -180,7 +192,26 @@ export default function PollsterDashboard() {
 
         {/* Pie Chart */}
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Yanıt Dağılımı</h2>
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h2 className="text-sm font-semibold text-foreground shrink-0">Yanıt Dağılımı</h2>
+            {statsData?.polls_list?.length > 0 && (
+              <Select value={selectedPollId ?? ""} onValueChange={setSelectedPollId}>
+                <SelectTrigger
+                  size="sm"
+                  className="h-7 max-w-[160px] text-xs border-border bg-muted/30 hover:bg-muted/50 text-muted-foreground"
+                >
+                  <SelectValue placeholder="Anket seçin" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {statsData.polls_list.map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)} className="text-xs">
+                      {p.question.length > 32 ? p.question.slice(0, 32) + "…" : p.question}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie

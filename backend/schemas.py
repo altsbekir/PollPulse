@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     role: str
+    streak_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

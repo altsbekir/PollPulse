@@ -192,9 +192,31 @@ def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
     if option:
         option.votes += 1
 
+    # Streak logic
+    user = db.query(models.User).filter(models.User.id == vote.user_id).first()
+    today = datetime.utcnow().date()
+    if user:
+        if user.last_vote_date is None:
+            user.streak_count = 1
+        else:
+            last_date = (
+                user.last_vote_date.date()
+                if isinstance(user.last_vote_date, datetime)
+                else user.last_vote_date
+            )
+            if last_date == today - timedelta(days=1):
+                user.streak_count = (user.streak_count or 0) + 1
+            elif last_date < today - timedelta(days=1):
+                user.streak_count = 1
+            # last_date == today → already voted today, keep streak unchanged
+        user.last_vote_date = datetime.utcnow()
+
     db.commit()
 
-    return {"message": "Vote recorded successfully"}
+    return {
+        "message": "Vote recorded successfully",
+        "streak_count": user.streak_count if user else 0,
+    }
 
 
 @app.get("/api/users/{user_id}/votes")
@@ -270,23 +292,32 @@ def get_pollster_stats(user_id: int, db: Session = Depends(get_db)):
             if 0 <= day_offset <= 6:
                 weekly_votes[day_offset] += 1
 
-    # Latest poll data for pie chart
-    latest_poll_data = None
+    # All polls with their options for the dropdown + pie chart
+    polls_list = []
     if polls:
-        latest_poll = max(polls, key=lambda p: p.created_at)
-        options = (
+        all_options = (
             db.query(models.Option)
-            .filter(models.Option.poll_id == latest_poll.id)
+            .filter(models.Option.poll_id.in_(poll_ids))
             .all()
         )
-        latest_poll_data = {
-            "question": latest_poll.question,
-            "options": [{"name": o.text, "value": o.votes} for o in options],
-        }
+        opts_map: dict = defaultdict(list)
+        for o in all_options:
+            opts_map[o.poll_id].append({"name": o.text, "value": o.votes})
+
+        for p in sorted(polls, key=lambda x: x.created_at, reverse=True):
+            polls_list.append({
+                "id": p.id,
+                "question": p.question,
+                "options": opts_map[p.id],
+            })
+
+    # latest_poll_data kept for backwards compatibility
+    latest_poll_data = polls_list[0] if polls_list else None
 
     return {
         "total_voters": total_voters,
         "total_polls": total_polls,
         "weekly_votes": weekly_votes,
         "latest_poll_data": latest_poll_data,
+        "polls_list": polls_list,
     }
