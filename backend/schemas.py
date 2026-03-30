@@ -47,3 +47,9 @@ class PollResponse(BaseModel):
     options: List[OptionResponse]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class VoteCreate(BaseModel):
+    user_id: int
+    poll_id: int
+    option_id: int

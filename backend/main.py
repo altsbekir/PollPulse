@@ -108,3 +108,48 @@ def get_polls(creator_id: int, db: Session = Depends(get_db)):
         setattr(p, "options", opts_by_poll[p.id])
 
     return polls
+
+
+@app.get("/api/polls", response_model=List[schemas.PollResponse])
+def get_all_polls(db: Session = Depends(get_db)):
+    polls = db.query(models.Poll).all()
+    if not polls:
+        return []
+
+    poll_ids = [p.id for p in polls]
+    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
+
+    opts_by_poll = defaultdict(list)
+    for opt in options:
+        opts_by_poll[opt.poll_id].append(opt)
+
+    for p in polls:
+        setattr(p, "options", opts_by_poll[p.id])
+
+    return polls
+
+
+@app.post("/api/vote")
+def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
+    existing_vote = db.query(models.Vote).filter(
+        models.Vote.user_id == vote.user_id,
+        models.Vote.poll_id == vote.poll_id
+    ).first()
+
+    if existing_vote:
+        raise HTTPException(status_code=400, detail="Already voted")
+
+    new_vote = models.Vote(
+        user_id=vote.user_id,
+        poll_id=vote.poll_id,
+        option_id=vote.option_id
+    )
+    db.add(new_vote)
+
+    option = db.query(models.Option).filter(models.Option.id == vote.option_id).first()
+    if option:
+        option.votes += 1
+
+    db.commit()
+
+    return {"message": "Vote recorded successfully"}
