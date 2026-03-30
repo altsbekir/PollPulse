@@ -17,23 +17,6 @@ import {
 import { PlusCircle, BarChart3, Users, Activity, ArrowUpRight, CheckCircle2, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-const barData = [
-  { name: "Pzt", votes: 120 },
-  { name: "Sal", votes: 310 },
-  { name: "Çar", votes: 245 },
-  { name: "Per", votes: 480 },
-  { name: "Cum", votes: 390 },
-  { name: "Cmt", votes: 210 },
-  { name: "Paz", votes: 155 },
-]
-
-const pieData = [
-  { name: "Seçenek A", value: 42 },
-  { name: "Seçenek B", value: 28 },
-  { name: "Seçenek C", value: 18 },
-  { name: "Seçenek D", value: 12 },
-]
-
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 
@@ -45,6 +28,7 @@ export default function PollsterDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [statsData, setStatsData] = useState<any>(null)
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -55,21 +39,30 @@ export default function PollsterDashboard() {
           return
         }
         const user = JSON.parse(userStr)
-        
-        const res = await fetch(`http://localhost:8000/api/polls/${user.id}`)
-        if (!res.ok) {
+
+        const [pollsRes, statsRes] = await Promise.all([
+          fetch(`http://localhost:8000/api/polls/${user.id}`),
+          fetch(`http://localhost:8000/api/pollster/stats/${user.id}`),
+        ])
+
+        if (!pollsRes.ok) {
           throw new Error("Anketler alınamadı")
         }
-        
-        const data = await res.json()
+
+        const data = await pollsRes.json()
         setPolls(data)
+
+        if (statsRes.ok) {
+          const stats = await statsRes.json()
+          setStatsData(stats)
+        }
       } catch (err: any) {
         setError(err.message)
       } finally {
         setLoading(false)
       }
     }
-    
+
     fetchPolls()
   }, [])
 
@@ -79,16 +72,28 @@ export default function PollsterDashboard() {
     return sum + pollVotes;
   }, 0);
 
+  const DAY_NAMES = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"]
+  const dynamicBarData = statsData?.weekly_votes
+    ? (statsData.weekly_votes as number[]).map((votes, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - (6 - i))
+        return { name: DAY_NAMES[d.getDay()], votes }
+      })
+    : Array.from({ length: 7 }, (_, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - (6 - i))
+        return { name: DAY_NAMES[d.getDay()], votes: 0 }
+      })
+
   const dynamicStats = [
     { label: "Toplam Anket", value: realTotalPolls.toString(), icon: BarChart3, change: "Tüm zamanlar" },
     { label: "Toplam Oy", value: realTotalVotes.toLocaleString("tr-TR"), icon: Activity, change: "Tüm zamanlar" },
-    { label: "Aktif Kullanıcı", value: "3.290", icon: Users, change: "geçen haftaya göre +%12" },
+    { label: "Aktif Kullanıcı", value: (statsData?.total_voters ?? 0).toLocaleString("tr-TR"), icon: Users, change: "Tüm anketlerden" },
   ];
 
-  const latestPoll = polls.length > 0 ? polls[polls.length - 1] : null;
-  const dynamicPieData = latestPoll
-    ? latestPoll.options?.map((opt: any) => ({ name: opt.text, value: opt.votes })) || []
-    : pieData;
+  const dynamicPieData = statsData?.latest_poll_data?.options?.length
+    ? statsData.latest_poll_data.options
+    : [{ name: "Veri yok", value: 1 }];
 
   const handleCopy = (id: number) => {
     navigator.clipboard.writeText(window.location.origin + '/anket/' + id)
@@ -145,7 +150,7 @@ export default function PollsterDashboard() {
         <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-4">Bu Haftanın Oyları</h2>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={barData} barSize={28}>
+            <BarChart data={dynamicBarData} barSize={28}>
               <XAxis
                 dataKey="name"
                 tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}

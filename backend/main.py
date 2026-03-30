@@ -231,3 +231,62 @@ def get_user_voted_polls(user_id: int, db: Session = Depends(get_db)):
         setattr(p, "options", opts_by_poll[p.id])
 
     return polls
+
+
+@app.get("/api/pollster/stats/{user_id}")
+def get_pollster_stats(user_id: int, db: Session = Depends(get_db)):
+    polls = db.query(models.Poll).filter(models.Poll.creator_id == user_id).all()
+    poll_ids = [p.id for p in polls]
+    total_polls = len(polls)
+
+    # Unique voters across all of this pollster's polls
+    if poll_ids:
+        total_voters = (
+            db.query(models.Vote.user_id)
+            .filter(models.Vote.poll_id.in_(poll_ids))
+            .distinct()
+            .count()
+        )
+    else:
+        total_voters = 0
+
+    # Weekly votes: index 0 = 6 days ago … index 6 = today (UTC)
+    now = datetime.utcnow()
+    period_start = datetime(now.year, now.month, now.day) - timedelta(days=6)
+
+    weekly_votes = [0] * 7
+    if poll_ids:
+        recent_votes = (
+            db.query(models.Vote)
+            .filter(
+                models.Vote.poll_id.in_(poll_ids),
+                models.Vote.created_at >= period_start,
+            )
+            .all()
+        )
+        for v in recent_votes:
+            created = v.created_at.replace(tzinfo=None) if v.created_at.tzinfo else v.created_at
+            day_offset = (created.date() - period_start.date()).days
+            if 0 <= day_offset <= 6:
+                weekly_votes[day_offset] += 1
+
+    # Latest poll data for pie chart
+    latest_poll_data = None
+    if polls:
+        latest_poll = max(polls, key=lambda p: p.created_at)
+        options = (
+            db.query(models.Option)
+            .filter(models.Option.poll_id == latest_poll.id)
+            .all()
+        )
+        latest_poll_data = {
+            "question": latest_poll.question,
+            "options": [{"name": o.text, "value": o.votes} for o in options],
+        }
+
+    return {
+        "total_voters": total_voters,
+        "total_polls": total_polls,
+        "weekly_votes": weekly_votes,
+        "latest_poll_data": latest_poll_data,
+    }
