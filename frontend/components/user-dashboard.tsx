@@ -1,49 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Flame, CheckCircle2, Clock, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const polls = [
-  {
-    id: "1",
-    title: "2026'nın en iyi programlama dili hangisi?",
-    description: "Bu yıl çalışmak istediğiniz favori dile oy verin.",
-    options: ["Python", "TypeScript", "Rust", "Go"],
-    totalVotes: 1248,
-    closesIn: "2 gün",
-    tag: "Teknoloji",
-  },
-  {
-    id: "2",
-    title: "Tercih ettiğiniz uzaktan çalışma düzeni?",
-    description: "Uzaktan çalışma gününüzü nasıl yapılandırmayı tercih ediyorsunuz?",
-    options: ["Tam uzaktan", "Hibrit", "Ortak çalışma alanı", "Ev ofisi"],
-    totalVotes: 867,
-    closesIn: "5 gün",
-    tag: "Yaşam Tarzı",
-  },
-  {
-    id: "3",
-    title: "Bu yıl en çok kullanılan yapay zekâ araçları?",
-    description: "Günlük iş akışınızda en çok hangi yapay zekâ asistanına güveniyorsunuz?",
-    options: ["ChatGPT", "Claude", "Gemini", "GitHub Copilot"],
-    totalVotes: 556,
-    closesIn: "1 gün",
-    tag: "Yapay Zekâ",
-  },
-  {
-    id: "4",
-    title: "Favori frontend framework'ünüz?",
-    description: "Geliştirirken en çok sevdiğiniz framework'e oyunuzu verin.",
-    options: ["React", "Vue", "Svelte", "Angular"],
-    totalVotes: 2341,
-    closesIn: "Kapandı",
-    tag: "Teknoloji",
-  },
-]
 
 const TAG_COLORS: Record<string, string> = {
   Teknoloji: "bg-blue-500/15 text-blue-400",
@@ -52,11 +14,67 @@ const TAG_COLORS: Record<string, string> = {
 }
 
 export default function UserDashboard() {
-  const [voted, setVoted] = useState<Record<string, string>>({})
+  const [user, setUser] = useState<any>(null)
+  const [polls, setPolls] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [voted, setVoted] = useState<Record<number, number>>({})
 
-  const vote = (pollId: string, option: string) => {
-    if (voted[pollId]) return
-    setVoted((prev) => ({ ...prev, [pollId]: option }))
+  const fetchPolls = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/polls")
+      if (!res.ok) throw new Error("Anketler getirilemedi")
+      const data = await res.json()
+      setPolls(data.reverse())
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+    fetchPolls()
+  }, [])
+
+  const handleVote = async (pollId: number, optionId: number) => {
+    if (!user) {
+      alert("Lütfen önce giriş yapın.")
+      return
+    }
+
+    try {
+      const payload = {
+        user_id: user.id,
+        poll_id: pollId,
+        option_id: optionId,
+      }
+
+      const res = await fetch("http://localhost:8000/api/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        if (res.status === 400) {
+          alert("Bu ankete zaten oy verdiniz!")
+          setVoted((prev) => ({ ...prev, [pollId]: optionId }))
+        } else {
+          throw new Error("Oy verme işlemi başarısız oldu.")
+        }
+        return
+      }
+
+      setVoted((prev) => ({ ...prev, [pollId]: optionId }))
+      await fetchPolls()
+    } catch (err: any) {
+      alert(err.message)
+    }
   }
 
   const streakDays = 5
@@ -84,10 +102,17 @@ export default function UserDashboard() {
 
       {/* Poll Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {polls.map((poll) => {
+        {loading && <p className="text-sm text-muted-foreground p-5">Yükleniyor...</p>}
+        {error && <p className="text-sm text-destructive p-5">{error}</p>}
+        {!loading && !error && polls.length === 0 && (
+          <p className="text-sm text-muted-foreground p-5">Henüz anket bulunmuyor.</p>
+        )}
+        {!loading && !error && polls.map((poll) => {
           const hasVoted = !!voted[poll.id]
-          const votedOption = voted[poll.id]
-          const isClosed = poll.closesIn === "Kapandı"
+          const votedOptionId = voted[poll.id]
+          const isClosed = false
+          const totalVotes = poll.options?.reduce((sum: number, o: any) => sum + o.votes, 0) || 0
+          const dateStr = new Date(poll.created_at).toLocaleDateString("tr-TR")
 
           return (
             <div
@@ -101,43 +126,33 @@ export default function UserDashboard() {
                     <span
                       className={cn(
                         "text-xs px-2 py-0.5 rounded-full font-medium",
-                        TAG_COLORS[poll.tag] ?? "bg-muted text-muted-foreground"
+                        TAG_COLORS["Teknoloji"]
                       )}
                     >
-                      {poll.tag}
+                      Genel
                     </span>
-                    {isClosed ? (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Kapandı
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {poll.closesIn} içinde kapanıyor
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {dateStr}
+                    </span>
                   </div>
                   <h2 className="text-base font-semibold text-foreground text-balance leading-snug">
-                    {poll.title}
+                    {poll.question}
                   </h2>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    {poll.description}
-                  </p>
                 </div>
               </div>
 
               {/* Options */}
               <div className="flex flex-col gap-2">
-                {poll.options.map((opt) => {
-                  const isSelected = votedOption === opt
+                {poll.options?.map((opt: any) => {
+                  const isSelected = votedOptionId === opt.id
                   return (
                     <button
-                      key={opt}
-                      onClick={() => vote(poll.id, opt)}
+                      key={opt.id}
+                      onClick={() => handleVote(poll.id, opt.id)}
                       disabled={hasVoted || isClosed}
                       className={cn(
-                        "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg border text-sm font-medium text-left transition-all duration-150",
+                        "flex items-center justify-between w-full px-3 py-2.5 rounded-lg border text-sm font-medium transition-all duration-150",
                         isSelected
                           ? "border-primary bg-primary/15 text-primary"
                           : hasVoted || isClosed
@@ -145,17 +160,20 @@ export default function UserDashboard() {
                           : "border-border bg-muted/20 text-foreground hover:border-primary/60 hover:bg-primary/8"
                       )}
                     >
-                      {isSelected ? (
-                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                      ) : (
-                        <div
-                          className={cn(
-                            "w-4 h-4 rounded-full border-2 shrink-0",
-                            hasVoted || isClosed ? "border-muted-foreground/30" : "border-muted-foreground/50"
-                          )}
-                        />
-                      )}
-                      {opt}
+                      <div className="flex items-center gap-3 text-left">
+                        {isSelected ? (
+                          <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                        ) : (
+                          <div
+                            className={cn(
+                              "w-4 h-4 rounded-full border-2 shrink-0",
+                              hasVoted || isClosed ? "border-muted-foreground/30" : "border-muted-foreground/50"
+                            )}
+                          />
+                        )}
+                        <span>{opt.text}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground opacity-80">{opt.votes}</span>
                     </button>
                   )
                 })}
@@ -164,7 +182,7 @@ export default function UserDashboard() {
               {/* Footer */}
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-muted-foreground">
-                  {poll.totalVotes.toLocaleString()} oy
+                  {totalVotes.toLocaleString()} oy
                 </span>
                 {hasVoted && (
                   <Link
