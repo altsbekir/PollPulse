@@ -67,7 +67,7 @@ export default function SinglePollPage() {
   const handleVote = async (optionId: number) => {
     if (!user) {
       alert("Lütfen önce giriş yapın.")
-      router.push("/")
+      router.push('/?redirect=/anket/' + id)
       return
     }
 

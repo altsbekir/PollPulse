@@ -73,7 +73,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         
         // Redirect based on role
         if (redirectUrl) {
-          router.push(redirectUrl)
+          window.location.href = redirectUrl
         } else if (data.user.role === "Pollster") {
           router.push("/pollster")
         } else {
