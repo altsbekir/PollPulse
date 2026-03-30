@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { BarChart3, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,13 +13,79 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<"pollster" | "user">("user")
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onLogin(role)
+    setError("")
+
+    if (isRegistering) {
+      setLoading(true)
+      try {
+        const backendRole = role === "pollster" ? "Pollster" : "Voter"
+        const res = await fetch("http://localhost:8000/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, role: backendRole }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.detail || "Kayıt başarısız oldu.")
+        }
+
+        setIsRegistering(false)
+        setEmail("")
+        setPassword("")
+        setError("")
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      setLoading(true)
+      try {
+        const res = await fetch("http://localhost:8000/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.detail || "Giriş başarısız oldu.")
+        }
+
+        const data = await res.json()
+        
+        // Save user to localStorage
+        localStorage.setItem("user", JSON.stringify(data.user))
+        
+        // Redirect based on role
+        if (data.user.role === "Pollster") {
+          router.push("/pollster")
+        } else {
+          router.push("/user")
+        }
+        
+        // Optional fallback to keep prop happy if needed by parent
+        if (onLogin) {
+          const userRole = data.user.role.toLowerCase() === "pollster" ? "pollster" : "user"
+          onLogin(userRole)
+        }
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
   }
 
   return (
@@ -46,11 +113,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         {/* Card */}
         <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl">
           <h1 className="text-xl font-semibold text-foreground mb-1">
-            Tekrar hoş geldiniz
+            {isRegistering ? "Hesap oluşturun" : "Tekrar hoş geldiniz"}
           </h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Devam etmek için hesabınıza giriş yapın
+            {isRegistering
+              ? "Ücretsiz hesabınızı oluşturmak için bilgilerinizi girin"
+              : "Devam etmek için hesabınıza giriş yapın"}
           </p>
+
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 mb-4">
+              {error}
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             {/* Email */}
@@ -116,16 +191,28 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {/* Submit */}
             <Button
               type="submit"
+              disabled={loading}
               className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold mt-1 rounded-lg"
             >
-              Giriş Yap
+              {loading
+                ? "İşleniyor..."
+                : isRegistering
+                ? "Kayıt Ol"
+                : "Giriş Yap"}
             </Button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground mt-6">
-            Hesabınız yok mu?{" "}
-            <button className="text-primary hover:underline font-medium">
-              Ücretsiz başlayın
+            {isRegistering ? "Zaten hesabınız var mı?" : "Hesabınız yok mu?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(!isRegistering)
+                setError("")
+              }}
+              className="text-primary hover:underline font-medium"
+            >
+              {isRegistering ? "Giriş yapın" : "Ücretsiz başlayın"}
             </button>
           </p>
         </div>
