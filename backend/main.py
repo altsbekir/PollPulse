@@ -1,5 +1,6 @@
 from typing import List
 from collections import defaultdict
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -69,7 +70,12 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
 
 @app.post("/api/polls", response_model=schemas.PollResponse)
 def create_poll(poll: schemas.PollCreate, db: Session = Depends(get_db)):
-    new_poll = models.Poll(question=poll.question, creator_id=poll.creator_id)
+    new_poll = models.Poll(
+        question=poll.question, 
+        creator_id=poll.creator_id,
+        visibility=poll.visibility,
+        duration=poll.duration
+    )
     db.add(new_poll)
     db.commit()
     db.refresh(new_poll)
@@ -112,21 +118,46 @@ def get_polls(creator_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/polls", response_model=List[schemas.PollResponse])
 def get_all_polls(db: Session = Depends(get_db)):
-    polls = db.query(models.Poll).all()
+    # 1. Filter out non-public polls
+    polls = db.query(models.Poll).filter(models.Poll.visibility == 'public').all()
     if not polls:
         return []
 
-    poll_ids = [p.id for p in polls]
+    now = datetime.utcnow()
+    valid_polls = []
+
+    for p in polls:
+        if p.duration == 'unlimited':
+            valid_polls.append(p)
+            continue
+            
+        # Ensure naive UTC comparison
+        created = p.created_at.replace(tzinfo=None) if p.created_at.tzinfo else p.created_at
+        
+        if p.duration == '24h':
+            if now < created + timedelta(hours=24):
+                valid_polls.append(p)
+        elif p.duration == '3d':
+            if now < created + timedelta(days=3):
+                valid_polls.append(p)
+        elif p.duration == '7d':
+            if now < created + timedelta(days=7):
+                valid_polls.append(p)
+
+    if not valid_polls:
+        return []
+
+    poll_ids = [p.id for p in valid_polls]
     options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
 
     opts_by_poll = defaultdict(list)
     for opt in options:
         opts_by_poll[opt.poll_id].append(opt)
 
-    for p in polls:
+    for p in valid_polls:
         setattr(p, "options", opts_by_poll[p.id])
 
-    return polls
+    return valid_polls
 
 
 @app.post("/api/vote")

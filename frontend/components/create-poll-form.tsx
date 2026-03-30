@@ -19,6 +19,8 @@ export default function CreatePollForm() {
   const router = useRouter()
   const [question, setQuestion] = useState("")
   const [options, setOptions] = useState(["", ""])
+  const [visibility, setVisibility] = useState("public")
+  const [duration, setDuration] = useState("unlimited")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -56,10 +58,14 @@ export default function CreatePollForm() {
       }
       const user = JSON.parse(userStr)
 
+      console.log("DEBUG PAYLOAD:", { question, visibility, duration });
+
       const payload = {
         question,
+        options: options.filter(o => o.trim().length > 0).map(o => ({ text: o })),
         creator_id: user.id,
-        options: options.filter(o => o.trim().length > 0).map(o => ({ text: o }))
+        visibility: visibility,
+        duration: duration
       }
 
       const res = await fetch("http://localhost:8000/api/polls", {
@@ -175,18 +181,26 @@ export default function CreatePollForm() {
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs text-muted-foreground">Görünürlük</Label>
-              <select className="h-9 rounded-lg border border-border bg-input text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary">
-                <option>Herkese Açık</option>
-                <option>Gizli</option>
+              <select
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value)}
+                className="h-9 rounded-lg border border-border bg-input text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="public">Herkese Açık</option>
+                <option value="private">Gizli</option>
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs text-muted-foreground">Süre</Label>
-              <select className="h-9 rounded-lg border border-border bg-input text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary">
-                <option>Süresiz</option>
-                <option>24 saat</option>
-                <option>3 gün</option>
-                <option>7 gün</option>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="h-9 rounded-lg border border-border bg-input text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="unlimited">Süresiz</option>
+                <option value="24h">24 saat</option>
+                <option value="3d">3 gün</option>
+                <option value="7d">7 gün</option>
               </select>
             </div>
           </div>

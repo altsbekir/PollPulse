@@ -9,6 +9,7 @@ import {
   LogOut,
   Users,
   ChevronRight,
+  Flame,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -21,11 +22,12 @@ interface NavItem {
 const pollsterNav: NavItem[] = [
   { label: "Kontrol Paneli", href: "/pollster", icon: LayoutDashboard },
   { label: "Anket Oluştur", href: "/pollster/create", icon: PlusCircle },
+  { label: "Anket Akışı", href: "/pollster/feed", icon: Flame },
   { label: "Sonuçlar", href: "/pollster/results", icon: BarChart3 },
 ]
 
 const userNav: NavItem[] = [
-  { label: "Kontrol Paneli", href: "/user", icon: LayoutDashboard },
+  { label: "Anket Akışı", href: "/user", icon: LayoutDashboard },
 ]
 
 interface DashboardLayoutProps {

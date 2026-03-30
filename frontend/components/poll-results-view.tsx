@@ -9,6 +9,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  PieChart,
+  Pie,
+  Legend,
 } from "recharts"
 import { Trophy, Users, TrendingUp, ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -22,7 +25,7 @@ export default function PollResultsView() {
   const isPollster = pathname.startsWith("/pollster")
   const backHref = isPollster ? "/pollster" : "/user"
 
-  const [votedPolls, setVotedPolls] = useState<any[]>([])
+  const [polls, setPolls] = useState<any[]>([])
   const [selectedPoll, setSelectedPoll] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,7 +45,7 @@ export default function PollResultsView() {
         const res = await fetch(endpoint)
         if (res.ok) {
           const data = await res.json()
-          setVotedPolls(data)
+          setPolls(data)
           if (data.length > 0) {
             setSelectedPoll(data[data.length - 1]) // Default to newest
           }
@@ -94,18 +97,18 @@ export default function PollResultsView() {
         Kontrol Paneline Dön
       </Link>
 
-      {votedPolls.length > 1 && (
+      {polls.length > 0 && (
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold text-foreground">Görüntülenen Anketi Seçin</label>
           <select
-            className="h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary w-full max-w-sm"
+            className="h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary w-full max-w-sm transition-colors cursor-pointer"
             value={selectedPoll?.id || ""}
             onChange={(e) => {
-              const p = votedPolls.find(poll => poll.id.toString() === e.target.value)
+              const p = polls.find(poll => poll.id.toString() === e.target.value)
               if (p) setSelectedPoll(p)
             }}
           >
-            {votedPolls.map((p) => (
+            {polls.map((p) => (
               <option key={p.id} value={p.id}>{p.question}</option>
             ))}
           </select>
@@ -150,42 +153,85 @@ export default function PollResultsView() {
         </div>
       )}
 
-      {/* Bar chart */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-5">Oy Dağılımı</h2>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} barSize={36} layout="vertical">
-            <XAxis
-              type="number"
-              tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              type="category"
-              dataKey="name"
-              tick={{ fill: "var(--color-foreground)", fontSize: 13 }}
-              axisLine={false}
-              tickLine={false}
-              width={100}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "var(--color-popover)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "8px",
-                color: "var(--color-foreground)",
-                fontSize: "12px",
-              }}
-              cursor={{ fill: "var(--color-muted)" }}
-            />
-            <Bar dataKey="votes" radius={[0, 4, 4, 0]}>
-              {chartData.map((entry: any, index: number) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Charts Area */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Pie chart */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-5">Yanıt Dağılımı</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="45%"
+                innerRadius={55}
+                outerRadius={80}
+                paddingAngle={3}
+                dataKey="votes"
+              >
+                {chartData.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Legend
+                iconType="circle"
+                iconSize={8}
+                formatter={(value) => (
+                  <span style={{ color: "var(--color-muted-foreground)", fontSize: "11px" }}>
+                    {value}
+                  </span>
+                )}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--color-popover)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "8px",
+                  color: "var(--color-foreground)",
+                  fontSize: "12px",
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Bar chart */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-5">Oy Dağılımı</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData} barSize={36} layout="vertical">
+              <XAxis
+                type="number"
+                tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tick={{ fill: "var(--color-foreground)", fontSize: 13 }}
+                axisLine={false}
+                tickLine={false}
+                width={100}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--color-popover)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "8px",
+                  color: "var(--color-foreground)",
+                  fontSize: "12px",
+                }}
+                cursor={{ fill: "var(--color-muted)" }}
+              />
+              <Bar dataKey="votes" radius={[0, 4, 4, 0]}>
+                {chartData.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Result rows */}

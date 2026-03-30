@@ -22,6 +22,8 @@ class Poll(Base):
     question = Column(String, nullable=False)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+    visibility = Column(String, default="public")
+    duration = Column(String, default="unlimited")
 
 
 class Option(Base):

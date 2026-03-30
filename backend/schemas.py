@@ -29,6 +29,8 @@ class OptionCreate(BaseModel):
 class PollCreate(BaseModel):
     question: str
     creator_id: int
+    visibility: str = "public"
+    duration: str = "unlimited"
     options: List[OptionCreate]
 
 
@@ -44,6 +46,8 @@ class PollResponse(BaseModel):
     id: int
     question: str
     created_at: datetime
+    visibility: str = "public"
+    duration: str = "unlimited"
     options: List[OptionResponse]
 
     model_config = ConfigDict(from_attributes=True)
