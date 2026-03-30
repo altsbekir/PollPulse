@@ -46,12 +46,42 @@ export default function CreatePollForm() {
     }, 900)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    setTimeout(() => {
+    try {
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        throw new Error("Kullanıcı bulunamadı")
+      }
+      const user = JSON.parse(userStr)
+
+      const payload = {
+        question,
+        creator_id: user.id,
+        options: options.filter(o => o.trim().length > 0).map(o => ({ text: o }))
+      }
+
+      const res = await fetch("http://localhost:8000/api/polls", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!res.ok) {
+        throw new Error("Anket oluşturulamadı")
+      }
+
+      setQuestion("")
+      setOptions(["", ""])
       router.push("/pollster")
-    }, 1000)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const filledOptions = options.filter((o) => o.trim().length > 0)

@@ -1,3 +1,5 @@
+from typing import List
+from collections import defaultdict
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -63,3 +65,46 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         "message": "Login successful",
         "user": schemas.UserResponse.model_validate(user),
     }
+
+
+@app.post("/api/polls", response_model=schemas.PollResponse)
+def create_poll(poll: schemas.PollCreate, db: Session = Depends(get_db)):
+    new_poll = models.Poll(question=poll.question, creator_id=poll.creator_id)
+    db.add(new_poll)
+    db.commit()
+    db.refresh(new_poll)
+
+    created_options = []
+    for option_schema in poll.options:
+        new_option = models.Option(poll_id=new_poll.id, text=option_schema.text)
+        db.add(new_option)
+        created_options.append(new_option)
+
+    db.commit()
+
+    for option in created_options:
+        db.refresh(option)
+
+    # Attach loaded options explicitly since relationship is not defined in models.py
+    setattr(new_poll, "options", created_options)
+
+    return new_poll
+
+
+@app.get("/api/polls/{creator_id}", response_model=List[schemas.PollResponse])
+def get_polls(creator_id: int, db: Session = Depends(get_db)):
+    polls = db.query(models.Poll).filter(models.Poll.creator_id == creator_id).all()
+    if not polls:
+        return []
+
+    poll_ids = [p.id for p in polls]
+    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
+
+    opts_by_poll = defaultdict(list)
+    for opt in options:
+        opts_by_poll[opt.poll_id].append(opt)
+
+    for p in polls:
+        setattr(p, "options", opts_by_poll[p.id])
+
+    return polls

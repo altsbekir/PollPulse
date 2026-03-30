@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   BarChart,
@@ -35,12 +36,7 @@ const pieData = [
 
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
-const recentPolls = [
-  { id: "1", title: "2026'nın en iyi programlama dili hangisi?", votes: 1248, status: "aktif", created: "2 saat önce" },
-  { id: "2", title: "Tercih ettiğiniz uzaktan çalışma düzeni?", votes: 867, status: "aktif", created: "1 gün önce" },
-  { id: "3", title: "Favori frontend framework'ünüz?", votes: 2341, status: "kapandı", created: "3 gün önce" },
-  { id: "4", title: "Bu yıl en çok kullanılan yapay zekâ araçları?", votes: 556, status: "aktif", created: "5 gün önce" },
-]
+
 
 const stats = [
   { label: "Toplam Anket", value: "48", icon: BarChart3, change: "+4 bu hafta" },
@@ -49,6 +45,36 @@ const stats = [
 ]
 
 export default function PollsterDashboard() {
+  const [polls, setPolls] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    const fetchPolls = async () => {
+      try {
+        const userStr = localStorage.getItem("user")
+        if (!userStr) {
+          setLoading(false)
+          return
+        }
+        const user = JSON.parse(userStr)
+        
+        const res = await fetch(`http://localhost:8000/api/polls/${user.id}`)
+        if (!res.ok) {
+          throw new Error("Anketler alınamadı")
+        }
+        
+        const data = await res.json()
+        setPolls(data)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPolls()
+  }, [])
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
       {/* Header */}
@@ -179,38 +205,49 @@ export default function PollsterDashboard() {
           </Link>
         </div>
         <div className="divide-y divide-border">
-          {recentPolls.map((poll) => (
+          {loading && <p className="p-5 text-sm text-muted-foreground">Yükleniyor...</p>}
+          {error && <p className="p-5 text-sm text-destructive">{error}</p>}
+          {!loading && !error && polls.length === 0 && (
+            <p className="p-5 text-sm text-muted-foreground">Henüz anket oluşturmadınız.</p>
+          )}
+          {!loading && !error && polls.map((poll) => {
+            const totalVotes = poll.options?.reduce((sum: number, opt: any) => sum + opt.votes, 0) || 0;
+            const dateStr = new Date(poll.created_at).toLocaleDateString("tr-TR");
+            // Placeholder status mapping logic can be expanded in the future
+            const status = "aktif";
+            
+            return (
             <div
               key={poll.id}
               className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
             >
               <div className="shrink-0">
-                {poll.status === "aktif" ? (
+                {status === "aktif" ? (
                   <div className="w-2 h-2 rounded-full bg-green-400" />
                 ) : (
                   <div className="w-2 h-2 rounded-full bg-muted-foreground" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{poll.title}</p>
+                <p className="text-sm font-medium text-foreground truncate">{poll.question}</p>
                 <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {poll.created}
+                  {dateStr}
                 </p>
               </div>
               <div className="shrink-0 flex items-center gap-3">
                 <span className="text-sm font-semibold text-foreground">
-                  {poll.votes.toLocaleString()}
+                  {totalVotes.toLocaleString()}
                   <span className="text-xs font-normal text-muted-foreground ml-1">oy</span>
                 </span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    poll.status === "aktif"
+                    status === "aktif"
                       ? "bg-green-400/15 text-green-400"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {poll.status}
+                  {status}
                 </span>
                 <Link
                   href={`/pollster/results?poll=${poll.id}`}
@@ -220,7 +257,8 @@ export default function PollsterDashboard() {
                 </Link>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

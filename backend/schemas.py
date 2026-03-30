@@ -1,4 +1,6 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
+from typing import List
+from datetime import datetime
 
 
 class UserCreate(BaseModel):
@@ -16,5 +18,32 @@ class UserResponse(BaseModel):
     id: int
     email: str
     role: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OptionCreate(BaseModel):
+    text: str
+
+
+class PollCreate(BaseModel):
+    question: str
+    creator_id: int
+    options: List[OptionCreate]
+
+
+class OptionResponse(BaseModel):
+    id: int
+    text: str
+    votes: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PollResponse(BaseModel):
+    id: int
+    question: str
+    created_at: datetime
+    options: List[OptionResponse]
 
     model_config = ConfigDict(from_attributes=True)
