@@ -46,22 +46,22 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         {/* Card */}
         <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl">
           <h1 className="text-xl font-semibold text-foreground mb-1">
-            Welcome back
+            Tekrar hoş geldiniz
           </h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Sign in to your account to continue
+            Devam etmek için hesabınıza giriş yapın
           </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             {/* Email */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-sm text-foreground">
-                Email
+                E-posta
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="siz@ornek.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -72,7 +72,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {/* Password */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="password" className="text-sm text-foreground">
-                Password
+                Şifre
               </Label>
               <Input
                 id="password"
@@ -87,7 +87,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
             {/* Role Selector */}
             <div className="flex flex-col gap-1.5">
-              <Label className="text-sm text-foreground">Role</Label>
+              <Label className="text-sm text-foreground">Rol</Label>
               <div className="grid grid-cols-2 gap-2">
                 {(["pollster", "user"] as const).map((r) => (
                   <button
@@ -107,7 +107,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                         role === r ? "text-primary" : "text-muted-foreground"
                       )}
                     />
-                    {r === "pollster" ? "Pollster" : "Voter"}
+                    {r === "pollster" ? "Anketör" : "Katılımcı"}
                   </button>
                 ))}
               </div>
@@ -118,14 +118,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               type="submit"
               className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold mt-1 rounded-lg"
             >
-              Sign In
+              Giriş Yap
             </Button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground mt-6">
-            Don&apos;t have an account?{" "}
+            Hesabınız yok mu?{" "}
             <button className="text-primary hover:underline font-medium">
-              Get started free
+              Ücretsiz başlayın
             </button>
           </p>
         </div>

@@ -17,35 +17,35 @@ import { PlusCircle, BarChart3, Users, Activity, ArrowUpRight, CheckCircle2, Clo
 import { Button } from "@/components/ui/button"
 
 const barData = [
-  { name: "Mon", votes: 120 },
-  { name: "Tue", votes: 310 },
-  { name: "Wed", votes: 245 },
-  { name: "Thu", votes: 480 },
-  { name: "Fri", votes: 390 },
-  { name: "Sat", votes: 210 },
-  { name: "Sun", votes: 155 },
+  { name: "Pzt", votes: 120 },
+  { name: "Sal", votes: 310 },
+  { name: "Çar", votes: 245 },
+  { name: "Per", votes: 480 },
+  { name: "Cum", votes: 390 },
+  { name: "Cmt", votes: 210 },
+  { name: "Paz", votes: 155 },
 ]
 
 const pieData = [
-  { name: "Option A", value: 42 },
-  { name: "Option B", value: 28 },
-  { name: "Option C", value: 18 },
-  { name: "Option D", value: 12 },
+  { name: "Seçenek A", value: 42 },
+  { name: "Seçenek B", value: 28 },
+  { name: "Seçenek C", value: 18 },
+  { name: "Seçenek D", value: 12 },
 ]
 
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 const recentPolls = [
-  { id: "1", title: "Best programming language in 2026?", votes: 1248, status: "active", created: "2 hours ago" },
-  { id: "2", title: "Preferred remote work setup?", votes: 867, status: "active", created: "1 day ago" },
-  { id: "3", title: "Favorite frontend framework?", votes: 2341, status: "closed", created: "3 days ago" },
-  { id: "4", title: "Most used AI tools this year?", votes: 556, status: "active", created: "5 days ago" },
+  { id: "1", title: "2026'nın en iyi programlama dili hangisi?", votes: 1248, status: "aktif", created: "2 saat önce" },
+  { id: "2", title: "Tercih ettiğiniz uzaktan çalışma düzeni?", votes: 867, status: "aktif", created: "1 gün önce" },
+  { id: "3", title: "Favori frontend framework'ünüz?", votes: 2341, status: "kapandı", created: "3 gün önce" },
+  { id: "4", title: "Bu yıl en çok kullanılan yapay zekâ araçları?", votes: 556, status: "aktif", created: "5 gün önce" },
 ]
 
 const stats = [
-  { label: "Total Polls", value: "48", icon: BarChart3, change: "+4 this week" },
-  { label: "Total Votes", value: "14,821", icon: Activity, change: "+1,204 today" },
-  { label: "Active Users", value: "3,290", icon: Users, change: "+12% vs last week" },
+  { label: "Toplam Anket", value: "48", icon: BarChart3, change: "+4 bu hafta" },
+  { label: "Toplam Oy", value: "14.821", icon: Activity, change: "+1.204 bugün" },
+  { label: "Aktif Kullanıcı", value: "3.290", icon: Users, change: "geçen haftaya göre +%12" },
 ]
 
 export default function PollsterDashboard() {
@@ -54,15 +54,15 @@ export default function PollsterDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground text-balance">Pollster Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground text-balance">Anketör Paneli</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Overview of your polls and engagement
+            Anketlerinizin ve etkileşimlerin genel görünümü
           </p>
         </div>
         <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 rounded-lg">
           <Link href="/pollster/create">
             <PlusCircle className="w-4 h-4" />
-            Create Poll
+            Anket Oluştur
           </Link>
         </Button>
       </div>
@@ -96,7 +96,7 @@ export default function PollsterDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Bar Chart */}
         <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Votes This Week</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Bu Haftanın Oyları</h2>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={barData} barSize={28}>
               <XAxis
@@ -128,7 +128,7 @@ export default function PollsterDashboard() {
 
         {/* Pie Chart */}
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Response Distribution</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Yanıt Dağılımı</h2>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
@@ -170,12 +170,12 @@ export default function PollsterDashboard() {
       {/* Recent Polls */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">Recent Polls</h2>
+          <h2 className="text-sm font-semibold text-foreground">Son Anketler</h2>
           <Link
             href="/pollster/results"
             className="text-xs text-primary hover:underline font-medium"
           >
-            View all
+            Tümünü gör
           </Link>
         </div>
         <div className="divide-y divide-border">
@@ -185,7 +185,7 @@ export default function PollsterDashboard() {
               className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
             >
               <div className="shrink-0">
-                {poll.status === "active" ? (
+                {poll.status === "aktif" ? (
                   <div className="w-2 h-2 rounded-full bg-green-400" />
                 ) : (
                   <div className="w-2 h-2 rounded-full bg-muted-foreground" />
@@ -201,11 +201,11 @@ export default function PollsterDashboard() {
               <div className="shrink-0 flex items-center gap-3">
                 <span className="text-sm font-semibold text-foreground">
                   {poll.votes.toLocaleString()}
-                  <span className="text-xs font-normal text-muted-foreground ml-1">votes</span>
+                  <span className="text-xs font-normal text-muted-foreground ml-1">oy</span>
                 </span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    poll.status === "active"
+                    poll.status === "aktif"
                       ? "bg-green-400/15 text-green-400"
                       : "bg-muted text-muted-foreground"
                   }`}
@@ -216,7 +216,7 @@ export default function PollsterDashboard() {
                   href={`/pollster/results?poll=${poll.id}`}
                   className="text-xs text-primary hover:underline font-medium"
                 >
-                  View
+                  Görüntüle
                 </Link>
               </div>
             </div>

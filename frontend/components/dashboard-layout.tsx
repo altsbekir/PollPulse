@@ -19,14 +19,14 @@ interface NavItem {
 }
 
 const pollsterNav: NavItem[] = [
-  { label: "Dashboard", href: "/pollster", icon: LayoutDashboard },
-  { label: "Create Poll", href: "/pollster/create", icon: PlusCircle },
-  { label: "Results", href: "/pollster/results", icon: BarChart3 },
+  { label: "Kontrol Paneli", href: "/pollster", icon: LayoutDashboard },
+  { label: "Anket Oluştur", href: "/pollster/create", icon: PlusCircle },
+  { label: "Sonuçlar", href: "/pollster/results", icon: BarChart3 },
 ]
 
 const userNav: NavItem[] = [
-  { label: "Dashboard", href: "/user", icon: LayoutDashboard },
-  { label: "My Polls", href: "/user", icon: Users },
+  { label: "Kontrol Paneli", href: "/user", icon: LayoutDashboard },
+  { label: "Anketlerim", href: "/user/results", icon: Users },
 ]
 
 interface DashboardLayoutProps {
@@ -54,7 +54,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
         {/* Role badge */}
         <div className="px-5 pt-4 pb-2">
           <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            {role === "pollster" ? "Pollster" : "Voter"}
+            {role === "pollster" ? "Anketör" : "Katılımcı"}
           </span>
         </div>
 
@@ -89,7 +89,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            Sign Out
+            Çıkış Yap
           </button>
         </div>
       </aside>

@@ -15,9 +15,9 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 const pollData = {
-  question: "Best programming language in 2026?",
+  question: "2026'nın en iyi programlama dili hangisi?",
   totalVotes: 1248,
-  closedAt: "March 28, 2026",
+  closedAt: "28 Mart 2026",
   results: [
     { option: "TypeScript", votes: 498, color: "#6366f1" },
     { option: "Python", votes: 374, color: "#8b5cf6" },
@@ -47,7 +47,7 @@ export default function PollResultsView() {
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Dashboard
+        Kontrol Paneline Dön
       </Link>
 
       {/* Poll question */}
@@ -55,7 +55,7 @@ export default function PollResultsView() {
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           <span className="text-xs font-medium text-primary uppercase tracking-wider">
-            Poll Results
+            Anket Sonuçları
           </span>
         </div>
         <h1 className="text-xl font-bold text-foreground text-balance leading-snug">
@@ -64,10 +64,10 @@ export default function PollResultsView() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
-            {pollData.totalVotes.toLocaleString()} total votes
+            {pollData.totalVotes.toLocaleString()} toplam oy
           </span>
           <span className="text-muted-foreground/50">·</span>
-          <span>Closed {pollData.closedAt}</span>
+          <span>Kapandı: {pollData.closedAt}</span>
         </div>
       </div>
 
@@ -77,18 +77,18 @@ export default function PollResultsView() {
           <Trophy className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <p className="text-xs text-primary font-medium uppercase tracking-wider">Top Answer</p>
+          <p className="text-xs text-primary font-medium uppercase tracking-wider">En Çok Oy Alan</p>
           <p className="text-base font-bold text-foreground mt-0.5">{winner.option}</p>
           <p className="text-sm text-muted-foreground">
-            {winner.votes.toLocaleString()} votes ·{" "}
-            {((winner.votes / pollData.totalVotes) * 100).toFixed(1)}% of total
+            {winner.votes.toLocaleString()} oy ·{" "}
+            toplamın %{((winner.votes / pollData.totalVotes) * 100).toFixed(1)}'i
           </p>
         </div>
       </div>
 
       {/* Bar chart */}
       <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-5">Vote Breakdown</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-5">Oy Dağılımı</h2>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} barSize={36} layout="vertical">
             <XAxis
@@ -127,7 +127,7 @@ export default function PollResultsView() {
       {/* Result rows */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">All Options</h2>
+          <h2 className="text-sm font-semibold text-foreground">Tüm Seçenekler</h2>
         </div>
         <div className="divide-y divide-border">
           {pollData.results.map((result, index) => {
@@ -154,7 +154,7 @@ export default function PollResultsView() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground">
-                      {result.votes.toLocaleString()} votes
+                      {result.votes.toLocaleString()} oy
                     </span>
                     <span
                       className="text-sm font-bold w-12 text-right"
