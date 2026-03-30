@@ -36,7 +36,21 @@ export default function UserDashboard() {
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
-      setUser(JSON.parse(userStr))
+      const parsedUser = JSON.parse(userStr)
+      setUser(parsedUser)
+      
+      fetch(`http://localhost:8000/api/users/${parsedUser.id}/votes`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const voteMap: Record<number, number> = {}
+            data.forEach((v: any) => {
+              voteMap[v.poll_id] = v.option_id
+            })
+            setVoted(voteMap)
+          }
+        })
+        .catch(err => console.error("Oylar getirilemedi:", err))
     }
     fetchPolls()
   }, [])

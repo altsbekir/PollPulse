@@ -153,3 +153,9 @@ def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Vote recorded successfully"}
+
+
+@app.get("/api/users/{user_id}/votes")
+def get_user_votes(user_id: int, db: Session = Depends(get_db)):
+    votes = db.query(models.Vote).filter(models.Vote.user_id == user_id).all()
+    return [{"poll_id": vote.poll_id, "option_id": vote.option_id} for vote in votes]
