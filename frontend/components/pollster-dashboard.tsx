@@ -38,11 +38,7 @@ const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 
 
-const stats = [
-  { label: "Toplam Anket", value: "48", icon: BarChart3, change: "+4 bu hafta" },
-  { label: "Toplam Oy", value: "14.821", icon: Activity, change: "+1.204 bugün" },
-  { label: "Aktif Kullanıcı", value: "3.290", icon: Users, change: "geçen haftaya göre +%12" },
-]
+
 
 export default function PollsterDashboard() {
   const [polls, setPolls] = useState<any[]>([])
@@ -75,6 +71,24 @@ export default function PollsterDashboard() {
     
     fetchPolls()
   }, [])
+
+  const realTotalPolls = polls.length;
+  const realTotalVotes = polls.reduce((sum, poll) => {
+    const pollVotes = poll.options?.reduce((acc: number, opt: any) => acc + opt.votes, 0) || 0;
+    return sum + pollVotes;
+  }, 0);
+
+  const dynamicStats = [
+    { label: "Toplam Anket", value: realTotalPolls.toString(), icon: BarChart3, change: "Tüm zamanlar" },
+    { label: "Toplam Oy", value: realTotalVotes.toLocaleString("tr-TR"), icon: Activity, change: "Tüm zamanlar" },
+    { label: "Aktif Kullanıcı", value: "3.290", icon: Users, change: "geçen haftaya göre +%12" },
+  ];
+
+  const latestPoll = polls.length > 0 ? polls[polls.length - 1] : null;
+  const dynamicPieData = latestPoll
+    ? latestPoll.options?.map((opt: any) => ({ name: opt.text, value: opt.votes })) || []
+    : pieData;
+
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
       {/* Header */}
@@ -95,7 +109,7 @@ export default function PollsterDashboard() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {stats.map((stat) => {
+        {dynamicStats.map((stat) => {
           const Icon = stat.icon
           return (
             <div
@@ -158,7 +172,7 @@ export default function PollsterDashboard() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={pieData}
+                data={dynamicPieData}
                 cx="50%"
                 cy="45%"
                 innerRadius={55}
@@ -166,7 +180,7 @@ export default function PollsterDashboard() {
                 paddingAngle={3}
                 dataKey="value"
               >
-                {pieData.map((_, index) => (
+                {dynamicPieData.map((_: any, index: number) => (
                   <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                 ))}
               </Pie>

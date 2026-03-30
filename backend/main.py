@@ -159,3 +159,33 @@ def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
 def get_user_votes(user_id: int, db: Session = Depends(get_db)):
     votes = db.query(models.Vote).filter(models.Vote.user_id == user_id).all()
     return [{"poll_id": vote.poll_id, "option_id": vote.option_id} for vote in votes]
+
+
+@app.get("/api/users/{user_id}/voted-polls", response_model=List[schemas.PollResponse])
+def get_user_voted_polls(user_id: int, db: Session = Depends(get_db)):
+    """
+    Fetches all unique polls that a specific user has voted on,
+    including all options and current vote counts.
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    votes = db.query(models.Vote.poll_id).filter(models.Vote.user_id == user_id).distinct().all()
+    if not votes:
+        return []
+
+    poll_ids = [v[0] for v in votes]
+
+    polls = db.query(models.Poll).filter(models.Poll.id.in_(poll_ids)).all()
+
+    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
+
+    opts_by_poll = defaultdict(list)
+    for opt in options:
+        opts_by_poll[opt.poll_id].append(opt)
+
+    for p in polls:
+        setattr(p, "options", opts_by_poll[p.id])
+
+    return polls
