@@ -26,7 +26,6 @@ const pollsterNav: NavItem[] = [
 
 const userNav: NavItem[] = [
   { label: "Kontrol Paneli", href: "/user", icon: LayoutDashboard },
-  { label: "Anketlerim", href: "/user/results", icon: Users },
 ]
 
 interface DashboardLayoutProps {

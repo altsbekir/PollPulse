@@ -19,9 +19,10 @@ const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4", "#eab308", "#10b
 
 export default function PollResultsView() {
   const pathname = usePathname()
-  const backHref = pathname.startsWith("/pollster") ? "/pollster" : "/user"
+  const isPollster = pathname.startsWith("/pollster")
+  const backHref = isPollster ? "/pollster" : "/user"
 
-  const [polls, setPolls] = useState<any[]>([])
+  const [votedPolls, setVotedPolls] = useState<any[]>([])
   const [selectedPoll, setSelectedPoll] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -34,10 +35,14 @@ export default function PollResultsView() {
           return
         }
         const user = JSON.parse(userStr)
-        const res = await fetch(`http://localhost:8000/api/polls/${user.id}`)
+        const endpoint = isPollster 
+          ? `http://localhost:8000/api/polls/${user.id}`
+          : `http://localhost:8000/api/users/${user.id}/voted-polls`
+          
+        const res = await fetch(endpoint)
         if (res.ok) {
           const data = await res.json()
-          setPolls(data)
+          setVotedPolls(data)
           if (data.length > 0) {
             setSelectedPoll(data[data.length - 1]) // Default to newest
           }
@@ -49,10 +54,13 @@ export default function PollResultsView() {
       }
     }
     fetchPolls()
-  }, [])
+  }, [isPollster])
 
   if (loading) return <div className="p-8 text-center text-muted-foreground text-sm">Yükleniyor...</div>
-  if (!selectedPoll) return <div className="p-8 text-center text-muted-foreground text-sm">Henüz anket/sonuç bulunmuyor.</div>
+  if (!selectedPoll) {
+    const emptyMsg = isPollster ? "Henüz anket/sonuç bulunmuyor." : "Henüz hiçbir ankete oy vermediniz."
+    return <div className="p-8 text-center text-muted-foreground text-sm">{emptyMsg}</div>
+  }
 
   const totalVotes = selectedPoll.options?.reduce((sum: number, opt: any) => sum + opt.votes, 0) || 0
   const closedAt = new Date(selectedPoll.created_at).toLocaleDateString("tr-TR")
@@ -86,18 +94,18 @@ export default function PollResultsView() {
         Kontrol Paneline Dön
       </Link>
 
-      {polls.length > 1 && (
+      {votedPolls.length > 1 && (
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold text-foreground">Görüntülenen Anketi Seçin</label>
           <select
             className="h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary w-full max-w-sm"
             value={selectedPoll?.id || ""}
             onChange={(e) => {
-              const p = polls.find(poll => poll.id.toString() === e.target.value)
+              const p = votedPolls.find(poll => poll.id.toString() === e.target.value)
               if (p) setSelectedPoll(p)
             }}
           >
-            {polls.map((p) => (
+            {votedPolls.map((p) => (
               <option key={p.id} value={p.id}>{p.question}</option>
             ))}
           </select>

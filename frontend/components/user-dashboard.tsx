@@ -160,6 +160,7 @@ export default function UserDashboard() {
               <div className="flex flex-col gap-2">
                 {poll.options?.map((opt: any) => {
                   const isSelected = votedOptionId === opt.id
+                  const percentage = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0
                   return (
                     <button
                       key={opt.id}
@@ -185,9 +186,18 @@ export default function UserDashboard() {
                             )}
                           />
                         )}
-                        <span>{opt.text}</span>
+                        <span className="flex items-center gap-2">
+                          {hasVoted && (
+                            <span className="font-bold min-w-[2.5rem] inline-block">{`%${percentage}`}</span>
+                          )}
+                          <span>{opt.text}</span>
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground opacity-80">{opt.votes}</span>
+                      {hasVoted && (
+                        <span className="text-xs text-muted-foreground opacity-80 shrink-0">
+                          {opt.votes} oy
+                        </span>
+                      )}
                     </button>
                   )
                 })}
@@ -195,17 +205,10 @@ export default function UserDashboard() {
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-muted-foreground">
-                  {totalVotes.toLocaleString()} oy
-                </span>
                 {hasVoted && (
-                  <Link
-                    href={`/user/results?poll=${poll.id}`}
-                    className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
-                  >
-                    Sonuçları gör
-                    <ChevronRight className="w-3 h-3" />
-                  </Link>
+                  <span className="text-xs text-muted-foreground">
+                    Toplam {totalVotes.toLocaleString()} oy
+                  </span>
                 )}
               </div>
             </div>
