@@ -127,7 +127,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </p>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {/* Email */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-sm text-foreground">
@@ -160,33 +160,35 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               />
             </div>
 
-            {/* Role Selector */}
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-sm text-foreground">Rol</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(["pollster", "user"] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRole(r)}
-                    className={cn(
-                      "flex items-center justify-center gap-2 h-10 rounded-lg border text-sm font-medium transition-all duration-150 capitalize",
-                      role === r
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-border bg-muted text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                    )}
-                  >
-                    <Zap
+            {/* Role Selector (Only for Registration) */}
+            {isRegistering && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-sm text-foreground">Rol</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["pollster", "user"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setRole(r)}
                       className={cn(
-                        "w-3.5 h-3.5",
-                        role === r ? "text-primary" : "text-muted-foreground"
+                        "flex items-center justify-center gap-2 h-10 rounded-lg border text-sm font-medium transition-all duration-150 capitalize",
+                        role === r
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border bg-muted text-muted-foreground hover:border-primary/50 hover:text-foreground"
                       )}
-                    />
-                    {r === "pollster" ? "Anketör" : "Katılımcı"}
-                  </button>
-                ))}
+                    >
+                      <Zap
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          role === r ? "text-primary" : "text-muted-foreground"
+                        )}
+                      />
+                      {r === "pollster" ? "Anketör" : "Katılımcı"}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Submit */}
             <Button
