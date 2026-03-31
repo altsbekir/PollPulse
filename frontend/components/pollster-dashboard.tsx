@@ -117,14 +117,14 @@ export default function PollsterDashboard() {
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground text-balance">Anketör Paneli</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground text-balance">Anketör Paneli</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Anketlerinizin ve etkileşimlerin genel görünümü
           </p>
         </div>
-        <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 rounded-lg">
+        <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 rounded-lg w-full sm:w-auto">
           <Link href="/pollster/create">
             <PlusCircle className="w-4 h-4" />
             Anket Oluştur
@@ -147,7 +147,7 @@ export default function PollsterDashboard() {
                   <Icon className="w-4 h-4 text-primary" />
                 </div>
               </div>
-              <div className="text-3xl font-bold text-foreground">{stat.value}</div>
+              <div className="text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</div>
               <div className="flex items-center gap-1.5 text-xs text-green-400 font-medium">
                 <ArrowUpRight className="w-3.5 h-3.5" />
                 {stat.change}
@@ -277,23 +277,25 @@ export default function PollsterDashboard() {
             return (
             <div
               key={poll.id}
-              className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
+              className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 hover:bg-muted/40 transition-colors"
             >
-              <div className="shrink-0">
-                {status === "aktif" ? (
-                  <div className="w-2 h-2 rounded-full bg-green-400" />
-                ) : (
-                  <div className="w-2 h-2 rounded-full bg-muted-foreground" />
-                )}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0">
+                  {status === "aktif" ? (
+                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{poll.question}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {dateStr}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{poll.question}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {dateStr}
-                </p>
-              </div>
-              <div className="shrink-0 flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:shrink-0 pl-5 sm:pl-0">
                 <span className="text-sm font-semibold text-foreground">
                   {totalVotes.toLocaleString()}
                   <span className="text-xs font-normal text-muted-foreground ml-1">oy</span>
@@ -315,7 +317,7 @@ export default function PollsterDashboard() {
                 </button>
                 <Link
                   href={`/pollster/results?poll=${poll.id}`}
-                  className="text-xs text-primary hover:underline font-medium ml-2"
+                  className="text-xs text-primary hover:underline font-medium"
                 >
                   Görüntüle
                 </Link>

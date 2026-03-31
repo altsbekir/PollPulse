@@ -125,10 +125,10 @@ export default function PollResultsView() {
             Anket Sonuçları
           </span>
         </div>
-        <h1 className="text-xl font-bold text-foreground text-balance leading-snug">
+        <h1 className="text-lg sm:text-xl font-bold text-foreground text-balance leading-snug">
           {selectedPoll.question}
         </h1>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
             {totalVotes.toLocaleString()} toplam oy
@@ -140,7 +140,7 @@ export default function PollResultsView() {
 
       {/* Winner highlight */}
       {winner && winner.votes > 0 && (
-        <div className="flex items-center gap-4 bg-primary/10 border border-primary/30 rounded-xl px-5 py-4">
+        <div className="flex items-start gap-3 sm:gap-4 bg-primary/10 border border-primary/30 rounded-xl px-4 sm:px-5 py-4">
           <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
             <Trophy className="w-5 h-5 text-primary" />
           </div>
@@ -214,7 +214,7 @@ export default function PollResultsView() {
                 tick={{ fill: "var(--color-foreground)", fontSize: 13 }}
                 axisLine={false}
                 tickLine={false}
-                width={100}
+                width={70}
               />
               <Tooltip
                 contentStyle={{

@@ -107,7 +107,7 @@ export default function CreatePollForm() {
     <div className="p-6 md:p-8 max-w-2xl mx-auto flex flex-col gap-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground text-balance">Yeni Anket Oluştur</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground text-balance">Yeni Anket Oluştur</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Sorunuzu ekleyin, seçenekleri belirleyin veya yapay zekânın sizin için oluşturmasını sağlayın.
         </p>
@@ -116,12 +116,12 @@ export default function CreatePollForm() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         {/* AI Assistant Panel */}
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Sparkles className="w-4 h-4 text-primary" />
             <Label className="text-sm font-semibold text-foreground">AI Asistanı</Label>
             <span className="text-xs text-muted-foreground">— Konu girin, soru ve seçenekler otomatik hazırlansın</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Input
               value={aiTopic}
               onChange={(e) => setAiTopic(e.target.value)}
@@ -133,7 +133,7 @@ export default function CreatePollForm() {
               type="button"
               onClick={generateFromAI}
               disabled={isGenerating || !aiTopic.trim()}
-              className="gap-1.5 h-10 px-4 shrink-0 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 hover:border-primary/50"
+              className="gap-1.5 h-10 px-4 shrink-0 w-full sm:w-auto bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 hover:border-primary/50"
               variant="outline"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isGenerating ? "animate-pulse" : ""}`} />

@@ -102,16 +102,16 @@ export default function UserDashboard() {
   return (
     <div className="p-6 md:p-8 flex flex-col gap-8">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground text-balance">Anket Akışınız</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground text-balance">Anket Akışınız</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Gündemdeki anketleri keşfedin ve oy verin
           </p>
         </div>
 
         {/* Streak Badge */}
-        <div className="shrink-0 flex items-center gap-2 bg-orange-500/15 border border-orange-500/30 px-4 py-2 rounded-xl">
+        <div className="shrink-0 flex items-center gap-2 bg-orange-500/15 border border-orange-500/30 px-4 py-2 rounded-xl self-start">
           <Flame className="w-5 h-5 text-orange-400" />
           <div>
             <p className="text-sm font-bold text-orange-400">{user?.streak_count ?? 0} Günlük Seri</p>
