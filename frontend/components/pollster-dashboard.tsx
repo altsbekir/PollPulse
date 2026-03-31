@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 
@@ -49,8 +50,8 @@ export default function PollsterDashboard() {
         const user = JSON.parse(userStr)
 
         const [pollsRes, statsRes] = await Promise.all([
-          fetch(`http://localhost:8000/api/polls/${user.id}`),
-          fetch(`http://localhost:8000/api/pollster/stats/${user.id}`),
+          fetch(`${API_URL}/api/polls/${user.id}`),
+          fetch(`${API_URL}/api/pollster/stats/${user.id}`),
         ])
 
         if (!pollsRes.ok) {

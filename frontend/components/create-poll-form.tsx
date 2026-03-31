@@ -7,13 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-const AI_QUESTIONS = [
-  "Hangi programlama paradigmasını tercih edersiniz: fonksiyonel mi, nesne yönelimli mi?",
-  "2026'da bir yazılım mühendisi için en önemli beceri nedir?",
-  "Günlük iş akışınızda yapay zekâ araçlarını ne sıklıkla kullanıyorsunuz?",
-  "Uzaktan ekip iletişimi için tercih ettiğiniz yöntem nedir?",
-  "İş yerinde en çok hangi bulut sağlayıcısını kullanıyorsunuz?",
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function CreatePollForm() {
   const router = useRouter()
@@ -23,6 +17,8 @@ export default function CreatePollForm() {
   const [duration, setDuration] = useState("unlimited")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [aiTopic, setAiTopic] = useState("")
+  const [aiError, setAiError] = useState("")
 
   const addOption = () => {
     if (options.length < 6) setOptions([...options, ""])
@@ -39,13 +35,27 @@ export default function CreatePollForm() {
     setOptions(updated)
   }
 
-  const generateQuestion = () => {
+  const generateFromAI = async () => {
+    if (!aiTopic.trim()) return
     setIsGenerating(true)
-    setTimeout(() => {
-      const random = AI_QUESTIONS[Math.floor(Math.random() * AI_QUESTIONS.length)]
-      setQuestion(random)
+    setAiError("")
+    try {
+      const res = await fetch(`${API_URL}/api/generate-ai-poll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: aiTopic.trim() }),
+      })
+      if (!res.ok) throw new Error("AI yanıt vermedi")
+      const data = await res.json()
+      setQuestion(data.question ?? "")
+      if (Array.isArray(data.options) && data.options.length >= 2) {
+        setOptions(data.options)
+      }
+    } catch (err: any) {
+      setAiError("Taslak oluşturulamadı. Lütfen tekrar deneyin.")
+    } finally {
       setIsGenerating(false)
-    }, 900)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,7 +78,7 @@ export default function CreatePollForm() {
         duration: duration
       }
 
-      const res = await fetch("http://localhost:8000/api/polls", {
+      const res = await fetch(`${API_URL}/api/polls`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -104,22 +114,40 @@ export default function CreatePollForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        {/* Question */}
-        <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold text-foreground">Anket Sorusu</Label>
+        {/* AI Assistant Panel */}
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <Label className="text-sm font-semibold text-foreground">AI Asistanı</Label>
+            <span className="text-xs text-muted-foreground">— Konu girin, soru ve seçenekler otomatik hazırlansın</span>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), generateFromAI())}
+              placeholder='Örn: "Yapay Zeka ve İş Dünyası", "Uzaktan Çalışma"'
+              className="bg-background/50 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary h-10 flex-1"
+            />
             <Button
               type="button"
+              onClick={generateFromAI}
+              disabled={isGenerating || !aiTopic.trim()}
+              className="gap-1.5 h-10 px-4 shrink-0 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 hover:border-primary/50"
               variant="outline"
-              size="sm"
-              onClick={generateQuestion}
-              disabled={isGenerating}
-              className="gap-1.5 text-xs border-border text-muted-foreground hover:text-primary hover:border-primary bg-transparent"
             >
-              <Sparkles className={`w-3.5 h-3.5 ${isGenerating ? "animate-pulse text-primary" : ""}`} />
-              {isGenerating ? "Oluşturuluyor..." : "Yapay Zekâ ile Oluştur"}
+              <Sparkles className={`w-3.5 h-3.5 ${isGenerating ? "animate-pulse" : ""}`} />
+              {isGenerating ? "AI Düşünüyor..." : "Taslak Hazırla"}
             </Button>
           </div>
+          {aiError && (
+            <p className="text-xs text-destructive">{aiError}</p>
+          )}
+        </div>
+
+        {/* Question */}
+        <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
+          <Label className="text-sm font-semibold text-foreground">Anket Sorusu</Label>
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}

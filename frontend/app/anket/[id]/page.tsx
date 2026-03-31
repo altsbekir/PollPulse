@@ -6,6 +6,8 @@ import { Flame, CheckCircle2, Clock, BarChart3, ChevronLeft } from "lucide-react
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 const TAG_COLORS: Record<string, string> = {
   Teknoloji: "bg-blue-500/15 text-blue-400",
   "Yaşam Tarzı": "bg-purple-500/15 text-purple-400",
@@ -25,7 +27,7 @@ export default function SinglePollPage() {
 
   const fetchPoll = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/polls/single/${id}`)
+      const res = await fetch(`${API_URL}/api/polls/single/${id}`)
       if (!res.ok) {
         if (res.status === 404) {
           throw new Error("Bu anket bulunamadı veya süresi dolmuş olabilir.")
@@ -52,7 +54,7 @@ export default function SinglePollPage() {
 
     // Check if user already voted on this poll
     if (currentUser) {
-      fetch(`http://localhost:8000/api/users/${currentUser.id}/votes`)
+      fetch(`${API_URL}/api/users/${currentUser.id}/votes`)
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data)) {
@@ -78,7 +80,7 @@ export default function SinglePollPage() {
         option_id: optionId,
       }
 
-      const res = await fetch("http://localhost:8000/api/vote", {
+      const res = await fetch(`${API_URL}/api/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

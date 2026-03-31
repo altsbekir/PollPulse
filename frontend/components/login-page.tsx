@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 interface LoginPageProps {
   onLogin: (role: "pollster" | "user") => void
 }
@@ -32,7 +34,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setLoading(true)
       try {
         const backendRole = role === "pollster" ? "Pollster" : "Voter"
-        const res = await fetch("http://localhost:8000/api/register", {
+        const res = await fetch(`${API_URL}/api/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password, role: backendRole }),
@@ -55,7 +57,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     } else {
       setLoading(true)
       try {
-        const res = await fetch("http://localhost:8000/api/login", {
+        const res = await fetch(`${API_URL}/api/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),

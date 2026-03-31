@@ -6,6 +6,8 @@ import { Flame, CheckCircle2, Clock, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 
 const TAG_COLORS: Record<string, string> = {
   Teknoloji: "bg-blue-500/15 text-blue-400",
@@ -22,7 +24,7 @@ export default function UserDashboard() {
 
   const fetchPolls = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/polls")
+      const res = await fetch(`${API_URL}/api/polls`)
       if (!res.ok) throw new Error("Anketler getirilemedi")
       const data = await res.json()
       setPolls(data.reverse())
@@ -39,7 +41,7 @@ export default function UserDashboard() {
       const parsedUser = JSON.parse(userStr)
       setUser(parsedUser)
       
-      fetch(`http://localhost:8000/api/users/${parsedUser.id}/votes`)
+      fetch(`${API_URL}/api/users/${parsedUser.id}/votes`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
@@ -68,7 +70,7 @@ export default function UserDashboard() {
         option_id: optionId,
       }
 
-      const res = await fetch("http://localhost:8000/api/vote", {
+      const res = await fetch(`${API_URL}/api/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
