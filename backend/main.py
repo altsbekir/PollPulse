@@ -29,7 +29,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://poll-pulse-tan.vercel.app" # BURAYA KENDİ VERCEL LİNKİNİ YAPIŞTIR (Sonunda / olmadan)
+        "https://poll-pulse-altsbekirs-projects.vercel.app" # BURAYA KENDİ VERCEL LİNKİNİ YAPIŞTIR (Sonunda / olmadan)
     ],
     allow_credentials=True,
     allow_methods=["*"],
