@@ -11,7 +11,7 @@ import enum
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +113,7 @@ class QuestionResponse(BaseModel):
 class SurveyCreate(BaseModel):
     title:       str
     image_url:   Optional[str] = None
+    is_anonymous: bool = False
     pollster_id: int
     questions:   List[QuestionCreate]
 
@@ -121,6 +122,7 @@ class SurveyResponse(BaseModel):
     id:          int
     title:       str
     image_url:   Optional[str]
+    is_anonymous: bool
     created_at:  datetime
     pollster_id: int
     questions:   List[QuestionResponse]
@@ -133,6 +135,7 @@ class SurveySummary(BaseModel):
     id:          int
     title:       str
     image_url:   Optional[str]
+    is_anonymous: bool
     created_at:  datetime
     pollster_id: int
 
@@ -182,20 +185,49 @@ class OptionResult(BaseModel):
     count: int
 
 
+class ChartPoint(BaseModel):
+    """
+    Recharts-friendly row: use as `data` for <BarChart><Bar dataKey="value" />…</BarChart>
+    with <XAxis dataKey="name" /> (or swap for horizontal bars).
+    """
+    id:    int
+    name:  str
+    value: int
+
+
+class Respondent(BaseModel):
+    name:  Optional[str] = None
+    email: str
+
+
+class AnswerDetail(BaseModel):
+    """
+    One stored answer with respondent identity.
+    Only populated on GET /api/surveys/{id}/results when the survey is not anonymous.
+    """
+    respondent:   Respondent
+    option_id:    Optional[int] = None
+    option_text:  Optional[str] = None
+    answer_text:  Optional[str] = None
+
+
 class QuestionResult(BaseModel):
     """Aggregated results for one question."""
-    id:            int
-    text:          str
+    id:              int
+    text:            str
     question_type: QuestionType
-    total_answers: int
-    options:       List[OptionResult]   # empty for OPEN_ENDED
-    open_texts:    List[str]            # populated for OPEN_ENDED / CHOICE_WITH_OTHER
+    total_answers:   int
+    options:         List[OptionResult] = Field(default_factory=list)   # empty for OPEN_ENDED
+    open_texts:      List[str] = Field(default_factory=list)              # OPEN_ENDED / CWO free text
+    chart_series:    List[ChartPoint] = Field(default_factory=list)       # MC / CWO option counts for charts
+    answer_details:  List[AnswerDetail] = Field(default_factory=list)    # non-anonymous only; empty otherwise
 
 
 class SurveyResults(BaseModel):
     """Full analytics payload returned by GET /api/surveys/{id}/results."""
     survey_id:           int
     title:               str
+    is_anonymous:        bool
     total_participants:  int   # unique user_ids that submitted (or raw answer rows if anon)
     questions:           List[QuestionResult]
 

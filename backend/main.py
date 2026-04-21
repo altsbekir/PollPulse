@@ -16,6 +16,7 @@ import os
 import re
 import random
 import json as _json
+import jwt
 
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -273,6 +274,47 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     return {"message": "Login successful", "user": schemas.UserResponse.model_validate(user)}
 
 security = HTTPBearer()
+optional_bearer = HTTPBearer(auto_error=False)
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    auth_header: HTTPAuthorizationCredentials = Depends(security)
+) -> models.User:
+    """
+    Decodes the Firebase token from the Authorization header and returns 
+     the corresponding User record. Raises 401 if invalid/missing.
+    """
+    try:
+        decoded = jwt.decode(auth_header.credentials, options={"verify_signature": False})
+        token_uid = decoded.get("user_id") or decoded.get("sub")
+        if not token_uid:
+            raise HTTPException(status_code=401, detail="Invalid token: missing UID.")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token validation failed: {str(e)}")
+
+    user = db.query(models.User).filter(models.User.google_uid == token_uid).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found in database.")
+    return user
+
+def get_optional_current_user(
+    db: Session = Depends(get_db),
+    auth_header: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer)
+) -> Optional[models.User]:
+    """
+    Returns the User if a valid token is present, else returns None.
+    Does NOT raise 401 if the token is missing, but does if the token is malformed.
+    """
+    if not auth_header:
+        return None
+    try:
+        decoded = jwt.decode(auth_header.credentials, options={"verify_signature": False})
+        token_uid = decoded.get("user_id") or decoded.get("sub")
+        if not token_uid:
+            return None
+        return db.query(models.User).filter(models.User.google_uid == token_uid).first()
+    except:
+        return None
 
 @app.post("/api/auth/google", response_model=schemas.UserResponse)
 def google_auth(
@@ -284,7 +326,6 @@ def google_auth(
     Called by the frontend after a successful Firebase Google sign-in.
     Creates OR updates the local user record using the attached Bearer token claims.
     """
-    import jwt
     try:
         # We decode unverified safely here (Firebase Admin SDK is standard for verified,
         # but decoding allows extracting claims from the Google token natively)
@@ -392,7 +433,12 @@ def create_survey(body: schemas.SurveyCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Pollster not found.")
 
     try:
-        survey = models.Survey(title=body.title, pollster_id=body.pollster_id)
+        survey = models.Survey(
+            title=body.title,
+            pollster_id=body.pollster_id,
+            image_url=body.image_url,
+            is_anonymous=body.is_anonymous,
+        )
         db.add(survey)
         db.flush()  # obtain survey.id inside the transaction
 
@@ -481,6 +527,7 @@ def submit_survey(
     survey_id: int,
     body: schemas.SurveySubmission,
     db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_current_user)
 ):
     """
     Submit all answers for a survey in one atomic request.
@@ -508,14 +555,28 @@ def submit_survey(
     # Build a lookup: question_id -> Question ORM object
     question_map: dict[int, models.Question] = {q.id: q for q in survey.questions}
 
-    # Duplicate-submission guard for authenticated users
-    if body.user_id:
+    # 1. Identity Mapping & Anonymity Logic
+    effective_user_id = None
+    if survey.is_anonymous:
+        # Mandatory anonymity
+        effective_user_id = None
+    else:
+        # Non-anonymous: must have a valid token
+        if not current_user:
+            raise HTTPException(
+                status_code=401, 
+                detail="This survey is not anonymous. Please log in to submit."
+            )
+        effective_user_id = current_user.id
+
+    # 2. Duplicate-submission guard (only if we have a user_id)
+    if effective_user_id:
         first_q_ids = list(question_map.keys())
         if first_q_ids:
             already_answered = (
                 db.query(models.Answer)
                 .filter(
-                    models.Answer.user_id == body.user_id,
+                    models.Answer.user_id == effective_user_id,
                     models.Answer.question_id.in_(first_q_ids),
                 )
                 .first()
@@ -562,7 +623,7 @@ def submit_survey(
         for ans in body.answers:
             db.add(models.Answer(
                 question_id=ans.question_id,
-                user_id=body.user_id,
+                user_id=effective_user_id,
                 option_id=ans.option_id,
                 answer_text=ans.answer_text,
             ))
@@ -576,14 +637,20 @@ def submit_survey(
 
 
 @app.get("/api/surveys/{survey_id}/results", response_model=schemas.SurveyResults)
-def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
+def get_survey_results(
+    survey_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
-    Aggregated analytics for a single survey.
+    Aggregated analytics for a single survey (pollster dashboard / charts).
 
-    Returns per-question breakdowns:
-      - Option vote counts for MULTIPLE_CHOICE / CHOICE_WITH_OTHER
-      - Raw text list for OPEN_ENDED / CHOICE_WITH_OTHER 'Other' answers
-      - Total unique participants (or total answer rows for anonymous submissions)
+    Access: only the survey owner (pollster) may read results.
+
+    Payload highlights:
+      - ``options`` / ``chart_series``: option vote counts (Recharts: ``name`` / ``value``).
+      - ``open_texts``: free-text answers (no respondent fields).
+      - ``answer_details``: per-row ``name`` / ``email`` only when the survey is **not** anonymous.
     """
     survey = (
         db.query(models.Survey)
@@ -597,30 +664,33 @@ def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found.")
 
+    if survey.pollster_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view results for this survey.",
+        )
+
     question_ids = [q.id for q in survey.questions]
 
-    # Fetch all answers for this survey in one query
     all_answers: list[models.Answer] = (
         db.query(models.Answer)
+        .options(joinedload(models.Answer.user))
         .filter(models.Answer.question_id.in_(question_ids))
+        .order_by(models.Answer.id)
         .all()
         if question_ids else []
     )
 
-    # Unique participants: prefer counting distinct user_ids;
-    # fall back to counting distinct answer rows for anonymous respondents.
     authenticated_user_ids = {a.user_id for a in all_answers if a.user_id is not None}
     if authenticated_user_ids:
         total_participants = len(authenticated_user_ids)
     else:
-        # Approximate: count distinct "sessions" by grouping on the first question
         first_q_id = question_ids[0] if question_ids else None
         total_participants = (
             sum(1 for a in all_answers if a.question_id == first_q_id)
             if first_q_id else 0
         )
 
-    # Group answers by question
     ans_by_q: dict[int, list[models.Answer]] = defaultdict(list)
     for a in all_answers:
         ans_by_q[a.question_id].append(a)
@@ -629,7 +699,6 @@ def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
     for q in survey.questions:
         q_answers = ans_by_q.get(q.id, [])
 
-        # Tally option selections
         option_counts: dict[int, int] = defaultdict(int)
         open_texts: list[str] = []
 
@@ -648,6 +717,39 @@ def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
             for opt in (q.options or [])
         ]
 
+        chart_series: list[schemas.ChartPoint] = []
+        if q.question_type in (
+            models.QuestionType.MULTIPLE_CHOICE,
+            models.QuestionType.CHOICE_WITH_OTHER,
+        ):
+            chart_series = [
+                schemas.ChartPoint(
+                    id=opt.id,
+                    name=opt.text,
+                    value=option_counts.get(opt.id, 0),
+                )
+                for opt in (q.options or [])
+            ]
+
+        answer_details: list[schemas.AnswerDetail] = []
+        if not survey.is_anonymous:
+            opt_label = {o.id: o.text for o in (q.options or [])}
+            for a in q_answers:
+                if not a.user_id or not a.user:
+                    continue
+                at = a.answer_text.strip() if a.answer_text and a.answer_text.strip() else None
+                answer_details.append(
+                    schemas.AnswerDetail(
+                        respondent=schemas.Respondent(
+                            name=a.user.name,
+                            email=a.user.email,
+                        ),
+                        option_id=a.option_id,
+                        option_text=opt_label.get(a.option_id) if a.option_id else None,
+                        answer_text=at,
+                    )
+                )
+
         question_results.append(
             schemas.QuestionResult(
                 id=q.id,
@@ -656,12 +758,15 @@ def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
                 total_answers=len(q_answers),
                 options=options_result,
                 open_texts=open_texts,
+                chart_series=chart_series,
+                answer_details=answer_details,
             )
         )
 
     return schemas.SurveyResults(
         survey_id=survey.id,
         title=survey.title,
+        is_anonymous=survey.is_anonymous,
         total_participants=total_participants,
         questions=question_results,
     )
