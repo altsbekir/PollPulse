@@ -6,3 +6,4 @@ passlib
 pydantic
 python-dotenv
 google-generativeai
+email-validator
