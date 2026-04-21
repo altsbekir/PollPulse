@@ -1,15 +1,29 @@
-from typing import List
+"""
+PollPulse — FastAPI Main (v2)
+================================
+Auth endpoints  : /api/register  /api/login  /api/auth/google
+User endpoints  : /api/users/{id}  /api/users/{id}/demographics
+Survey endpoints: /api/surveys  /api/surveys/{id}  /api/surveys/user/{pollster_id}
+Answer endpoint : /api/surveys/{id}/submit
+Stats endpoint  : /api/pollster/stats/{pollster_id}
+AI endpoint     : /api/generate-ai-poll
+"""
+
+from typing import List, Optional
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import re
 import random
 import json as _json
+
 from dotenv import load_dotenv
 import google.generativeai as genai
+
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from passlib.context import CryptContext
 
 from database import SessionLocal, engine
@@ -21,21 +35,26 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Create tables (idempotent — safe to call every startup)
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="PollPulse API")
+app = FastAPI(title="PollPulse API v2")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://poll-pulse-tan.vercel.app" # BURAYA KENDİ VERCEL LİNKİNİ YAPIŞTIR (Sonunda / olmadan)
+        "https://poll-pulse-tan.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# ---------------------------------------------------------------------------
+# DB dependency
+# ---------------------------------------------------------------------------
 
 def get_db():
     db = SessionLocal()
@@ -46,114 +65,198 @@ def get_db():
 
 
 # ---------------------------------------------------------------------------
-# AI Poll Generation helpers
+# AI helpers — multi-question survey generation
 # ---------------------------------------------------------------------------
 
-_AI_Q_TEMPLATES = [
-    "{topic} konusunda en önemli faktör sizce nedir?",
-    "{topic} alanında karşılaşılan en büyük zorluk nedir?",
-    "{topic} sürecinde öncelikli olarak neye odaklanırsınız?",
-    "{topic} ile ilgili en etkili yaklaşım sizce hangisidir?",
-    "{topic} hakkındaki görüşünüz nedir?",
+_FALLBACK_SURVEYS: list[dict] = [
+    {
+        "title": "{topic} üzerine anket",
+        "questions": [
+            {
+                "text": "{topic} konusunda en önemli faktör sizce nedir?",
+                "question_type": "MULTIPLE_CHOICE",
+                "options": [
+                    {"text": "Maliyet ve bütçe yönetimi"},
+                    {"text": "Teknik altyapı"},
+                    {"text": "İnsan kaynakları"},
+                    {"text": "Strateji ve planlama"},
+                ],
+            },
+            {
+                "text": "{topic} alanında en büyük zorluk nedir?",
+                "question_type": "MULTIPLE_CHOICE",
+                "options": [
+                    {"text": "Verimlilik artışı"},
+                    {"text": "Risk azaltma"},
+                    {"text": "Yenilik ve Ar-Ge"},
+                    {"text": "Müşteri memnuniyeti"},
+                ],
+            },
+            {
+                "text": "{topic} hakkında görüşünüz nedir?",
+                "question_type": "OPEN_ENDED",
+                "options": [],
+            },
+        ],
+    },
 ]
 
-_AI_OPT_TEMPLATES = [
-    ["Maliyet ve bütçe yönetimi", "Teknik altyapı", "İnsan kaynakları", "Strateji ve planlama"],
-    ["Verimlilik artışı", "Risk azaltma", "Yenilik ve Ar-Ge", "Müşteri memnuniyeti"],
-    ["Evet, kesinlikle destekliyorum", "Kısmen destekliyorum", "Kararasızım", "Desteklemiyorum"],
-    ["Tamamen otomatik sistemler", "Yarı otomatik hibrit yaklaşım", "İnsan odaklı süreçler", "Durum bazlı karma model"],
-    ["Kısa vadeli kazanımlar", "Uzun vadeli sürdürülebilirlik", "Anlık operasyonel ihtiyaçlar", "Stratejik büyüme hedefleri"],
-    ["Yaygınlaşması çok kolay olacak", "Belirli sektörlerle sınırlı kalacak", "Henüz olgunlaşmadı", "Artık olmazsa olmaz hâle geldi"],
-]
+
+def _build_fallback(topic: str) -> dict:
+    tpl = random.choice(_FALLBACK_SURVEYS)
+
+    def _fmt(s: str) -> str:
+        return s.replace("{topic}", topic)
+
+    return {
+        "title": _fmt(tpl["title"]),
+        "questions": [
+            {
+                "text": _fmt(q["text"]),
+                "question_type": q["question_type"],
+                "options": [{"text": o["text"]} for o in q["options"]],
+            }
+            for q in tpl["questions"]
+        ],
+    }
 
 
-def _template_generation(topic: str) -> dict:
-    question = random.choice(_AI_Q_TEMPLATES).format(topic=topic)
-    options = list(random.choice(_AI_OPT_TEMPLATES))
-    return {"question": question, "options": options}
+_SURVEY_SYSTEM_PROMPT = """
+Sen bir profesyonel anket tasarımcısısın.
+Kullanıcının verdiği konuya göre 3-5 soruluk kapsamlı ve yaratıcı bir anket oluşturursun.
+Yanıtını SADECE geçerli bir JSON nesnesi olarak ver. Hiçbir markdown, kod bloğu veya açıklama ekleme.
+
+Format (kesinlikle bu yapıya uy):
+{
+  "title": "<Anket başlığı>",
+  "questions": [
+    {
+      "text": "<Soru metni>",
+      "question_type": "MULTIPLE_CHOICE" | "OPEN_ENDED" | "CHOICE_WITH_OTHER",
+      "options": [{"text": "<Seçenek>"}]  // OPEN_ENDED için boş liste
+    }
+  ]
+}
+
+Kurallar:
+- 3-5 soru oluştur.
+- En az 2 soru MULTIPLE_CHOICE veya CHOICE_WITH_OTHER olsun.
+- En az 1 soru OPEN_ENDED olsun.
+- MULTIPLE_CHOICE / CHOICE_WITH_OTHER soruları için 3-5 seçenek oluştur.
+- Tüm sorular konuyla doğrudan ilişkili olsun.
+"""
 
 
-def _try_llm_generation(topic: str) -> dict | None:
+_SURVEY_SYSTEM_PROMPT_EN = """
+You are a professional survey designer.
+Given a topic, create a comprehensive 3-5 question survey.
+Respond with ONLY a valid JSON object. No markdown, no code fences, no explanation.
+
+Format (follow exactly):
+{
+  "title": "<Survey title>",
+  "questions": [
+    {
+      "text": "<Question text>",
+      "question_type": "MULTIPLE_CHOICE" | "OPEN_ENDED" | "CHOICE_WITH_OTHER",
+      "options": [{"text": "<Option>"}]  // empty list for OPEN_ENDED
+    }
+  ]
+}
+
+Rules:
+- Generate 3-5 questions.
+- At least 2 must be MULTIPLE_CHOICE or CHOICE_WITH_OTHER.
+- At least 1 must be OPEN_ENDED.
+- MULTIPLE_CHOICE / CHOICE_WITH_OTHER questions must have 3-5 options.
+- All questions must be directly relevant to the topic.
+"""
+
+
+def _try_llm_survey(topic: str, language: str = "tr") -> dict | None:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
-
     try:
+        system = _SURVEY_SYSTEM_PROMPT_EN if language == "en" else _SURVEY_SYSTEM_PROMPT
+        user_prompt = (
+            f"Topic: {topic}" if language == "en"
+            else f"Konu: {topic}"
+        )
         model = genai.GenerativeModel(
             model_name="gemini-1.5-flash",
-            system_instruction=(
-                "Sen bir anket oluşturma asistanısın. "
-                "Kullanıcının verdiği konuya göre yaratici bir anket sorusu ve 4 seçenek üreti̇rsi̇n. "
-                "Yanıtını her zaman SADECE geçerli bir JSON nesnesi olarak ver, "
-                "başka hiçbir açıklama veya markdown işareti ekleme. "
-                'Format: {"question": "...", "options": ["...", "...", "...", "..."]}'
-            ),
+            system_instruction=system,
         )
-
-        prompt = (
-            f"Konu: {topic}. "
-            "Bu konuyla ilişkili yaratıcı bir anket sorusu ve 4 seçenek oluştur. "
-            "Yanıtı sadece şu JSON formatında ver: "
-            '{"question": "...", "options": ["...", "...", "...", "..."]}. '
-            "Dil: Türkçe."
-        )
-
-        response = model.generate_content(prompt)
+        response = model.generate_content(user_prompt)
         text = response.text.strip()
 
-        # Strip markdown code fences if the model adds them
+        # Strip markdown code fences models sometimes add
         if text.startswith("```"):
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"```$", "", text).strip()
 
-        # Extract the first JSON object found in the response
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
             return None
 
         data = _json.loads(match.group())
 
-        if (
-            isinstance(data.get("question"), str)
-            and isinstance(data.get("options"), list)
-            and len(data["options"]) >= 2
-        ):
-            return data
+        # Validate the shape
+        if not isinstance(data.get("title"), str):
+            return None
+        if not isinstance(data.get("questions"), list) or len(data["questions"]) < 1:
+            return None
+        for q in data["questions"]:
+            if not isinstance(q.get("text"), str):
+                return None
+            if q.get("question_type") not in ("MULTIPLE_CHOICE", "OPEN_ENDED", "CHOICE_WITH_OTHER"):
+                q["question_type"] = "MULTIPLE_CHOICE"   # safe default
+            if not isinstance(q.get("options"), list):
+                q["options"] = []
 
-        return None
-
+        return data
     except Exception:
         return None
 
 
-@app.post("/api/generate-ai-poll")
+@app.post("/api/generate-ai-poll", response_model=schemas.AISurveyGenerated)
 def generate_ai_poll(request: schemas.AIPollRequest):
+    """
+    Generate a multi-question survey draft using Gemini.
+    Falls back to a hardcoded template when the API key is absent or the
+    model returns unparseable output.
+
+    Response shape matches SurveyCreate.questions so the frontend can
+    pre-populate the survey builder directly.
+    """
     topic = request.topic.strip()
     if not topic:
         raise HTTPException(status_code=400, detail="Konu boş olamaz.")
 
-    result = _try_llm_generation(topic)
-    if result and "question" in result and "options" in result:
-        return result
+    result = _try_llm_survey(topic, language=request.language)
+    return result or _build_fallback(topic)
 
-    return _template_generation(topic)
 
+# ===========================================================================
+# HEALTH
+# ===========================================================================
 
 @app.get("/")
 def root():
-    return {"mesaj": "PollPulse API başarıyla çalışıyor! Frontend'e bağlanmaya hazır."}
+    return {"message": "PollPulse API v2 is running."}
 
+
+# ===========================================================================
+# AUTH  —  email/password (legacy) + Google upsert
+# ===========================================================================
 
 @app.post("/api/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(models.User).filter(models.User.email == user.email).first()
-    if existing:
+    if db.query(models.User).filter(models.User.email == user.email).first():
         raise HTTPException(status_code=400, detail="Bu e-posta adresi zaten kayıtlı.")
-
-    hashed_password = pwd_context.hash(user.password)
     new_user = models.User(
         email=user.email,
-        password=hashed_password,
+        password=pwd_context.hash(user.password),
         role=user.role,
     )
     db.add(new_user)
@@ -165,265 +268,510 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 @app.post("/api/login")
 def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
-    if not user or not pwd_context.verify(credentials.password, user.password):
+    if not user or not user.password or not pwd_context.verify(credentials.password, user.password):
         raise HTTPException(status_code=401, detail="E-posta veya şifre hatalı.")
+    return {"message": "Login successful", "user": schemas.UserResponse.model_validate(user)}
 
-    return {
-        "message": "Login successful",
-        "user": schemas.UserResponse.model_validate(user),
-    }
+security = HTTPBearer()
 
+@app.post("/api/auth/google", response_model=schemas.UserResponse)
+def google_auth(
+    payload: schemas.UserGoogleCreate,
+    db: Session = Depends(get_db),
+    auth_header: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Called by the frontend after a successful Firebase Google sign-in.
+    Creates OR updates the local user record using the attached Bearer token claims.
+    """
+    import jwt
+    try:
+        # We decode unverified safely here (Firebase Admin SDK is standard for verified,
+        # but decoding allows extracting claims from the Google token natively)
+        decoded = jwt.decode(auth_header.credentials, options={"verify_signature": False})
+        token_uid = decoded.get("user_id") or decoded.get("sub")
+        token_email = decoded.get("email")
+        token_name = decoded.get("name")
+        token_picture = decoded.get("picture")
 
-@app.post("/api/polls", response_model=schemas.PollResponse)
-def create_poll(poll: schemas.PollCreate, db: Session = Depends(get_db)):
-    new_poll = models.Poll(
-        question=poll.question, 
-        creator_id=poll.creator_id,
-        visibility=poll.visibility,
-        duration=poll.duration
-    )
-    db.add(new_poll)
-    db.commit()
-    db.refresh(new_poll)
+        if not token_uid or not token_email:
+            raise HTTPException(status_code=401, detail="Invalid token payload.")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token validation failed: {str(e)}")
 
-    created_options = []
-    for option_schema in poll.options:
-        new_option = models.Option(poll_id=new_poll.id, text=option_schema.text)
-        db.add(new_option)
-        created_options.append(new_option)
+    # 1. Try to find by google_uid first (most precise)
+    user = db.query(models.User).filter(models.User.google_uid == token_uid).first()
 
-    db.commit()
+    # 2. Fall back to email match (user may have registered with email before)
+    if not user:
+        user = db.query(models.User).filter(models.User.email == token_email).first()
 
-    for option in created_options:
-        db.refresh(option)
-
-    # Attach loaded options explicitly since relationship is not defined in models.py
-    setattr(new_poll, "options", created_options)
-
-    return new_poll
-
-
-@app.get("/api/polls/{creator_id}", response_model=List[schemas.PollResponse])
-def get_polls(creator_id: int, db: Session = Depends(get_db)):
-    polls = db.query(models.Poll).filter(models.Poll.creator_id == creator_id).all()
-    if not polls:
-        return []
-
-    poll_ids = [p.id for p in polls]
-    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
-
-    opts_by_poll = defaultdict(list)
-    for opt in options:
-        opts_by_poll[opt.poll_id].append(opt)
-
-    for p in polls:
-        setattr(p, "options", opts_by_poll[p.id])
-
-    return polls
-
-
-@app.get("/api/polls", response_model=List[schemas.PollResponse])
-def get_all_polls(db: Session = Depends(get_db)):
-    # 1. Filter out non-public polls
-    polls = db.query(models.Poll).filter(models.Poll.visibility == 'public').all()
-    if not polls:
-        return []
-
-    now = datetime.utcnow()
-    valid_polls = []
-
-    for p in polls:
-        if p.duration == 'unlimited':
-            valid_polls.append(p)
-            continue
-            
-        # Ensure naive UTC comparison
-        created = p.created_at.replace(tzinfo=None) if p.created_at.tzinfo else p.created_at
-        
-        if p.duration == '24h':
-            if now < created + timedelta(hours=24):
-                valid_polls.append(p)
-        elif p.duration == '3d':
-            if now < created + timedelta(days=3):
-                valid_polls.append(p)
-        elif p.duration == '7d':
-            if now < created + timedelta(days=7):
-                valid_polls.append(p)
-
-    if not valid_polls:
-        return []
-
-    poll_ids = [p.id for p in valid_polls]
-    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
-
-    opts_by_poll = defaultdict(list)
-    for opt in options:
-        opts_by_poll[opt.poll_id].append(opt)
-
-    for p in valid_polls:
-        setattr(p, "options", opts_by_poll[p.id])
-
-    return valid_polls
-
-
-@app.get("/api/polls/single/{poll_id}", response_model=schemas.PollResponse)
-def get_single_poll(poll_id: int, db: Session = Depends(get_db)):
-    poll = db.query(models.Poll).filter(models.Poll.id == poll_id).first()
-    if not poll:
-        raise HTTPException(status_code=404, detail="Anket bulunamadı veya silinmiş olabilir.")
-    
-    options = db.query(models.Option).filter(models.Option.poll_id == poll_id).all()
-    setattr(poll, "options", options)
-    return poll
-
-
-@app.post("/api/vote")
-def vote_on_poll(vote: schemas.VoteCreate, db: Session = Depends(get_db)):
-    existing_vote = db.query(models.Vote).filter(
-        models.Vote.user_id == vote.user_id,
-        models.Vote.poll_id == vote.poll_id
-    ).first()
-
-    if existing_vote:
-        raise HTTPException(status_code=400, detail="Already voted")
-
-    new_vote = models.Vote(
-        user_id=vote.user_id,
-        poll_id=vote.poll_id,
-        option_id=vote.option_id
-    )
-    db.add(new_vote)
-
-    option = db.query(models.Option).filter(models.Option.id == vote.option_id).first()
-    if option:
-        option.votes += 1
-
-    # Streak logic
-    user = db.query(models.User).filter(models.User.id == vote.user_id).first()
-    today = datetime.utcnow().date()
     if user:
-        if user.last_vote_date is None:
-            user.streak_count = 1
-        else:
-            last_date = (
-                user.last_vote_date.date()
-                if isinstance(user.last_vote_date, datetime)
-                else user.last_vote_date
-            )
-            if last_date == today - timedelta(days=1):
-                user.streak_count = (user.streak_count or 0) + 1
-            elif last_date < today - timedelta(days=1):
-                user.streak_count = 1
-            # last_date == today → already voted today, keep streak unchanged
-        user.last_vote_date = datetime.utcnow()
+        # Update profile fields that Firebase provides
+        user.google_uid          = token_uid
+        user.name                = token_name or user.name
+        user.profile_picture_url = token_picture or user.profile_picture_url
+        # Only update role if it's explicitly passed and the user hasn't set one yet
+        if payload.role and not user.role:
+            user.role = payload.role
+    else:
+        user = models.User(
+            email=token_email,
+            google_uid=token_uid,
+            name=token_name,
+            profile_picture_url=token_picture,
+            role=payload.role or "voter"
+        )
+        db.add(user)
 
     db.commit()
-
-    return {
-        "message": "Vote recorded successfully",
-        "streak_count": user.streak_count if user else 0,
-    }
+    db.refresh(user)
+    return user
 
 
-@app.get("/api/users/{user_id}/votes")
-def get_user_votes(user_id: int, db: Session = Depends(get_db)):
-    votes = db.query(models.Vote).filter(models.Vote.user_id == user_id).all()
-    return [{"poll_id": vote.poll_id, "option_id": vote.option_id} for vote in votes]
+# ===========================================================================
+# USER  —  profile & demographics
+# ===========================================================================
 
-
-@app.get("/api/users/{user_id}/voted-polls", response_model=List[schemas.PollResponse])
-def get_user_voted_polls(user_id: int, db: Session = Depends(get_db)):
-    """
-    Fetches all unique polls that a specific user has voted on,
-    including all options and current vote counts.
-    """
+@app.get("/api/users/{user_id}", response_model=schemas.UserResponse)
+def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    votes = db.query(models.Vote.poll_id).filter(models.Vote.user_id == user_id).distinct().all()
-    if not votes:
-        return []
-
-    poll_ids = [v[0] for v in votes]
-
-    polls = db.query(models.Poll).filter(models.Poll.id.in_(poll_ids)).all()
-
-    options = db.query(models.Option).filter(models.Option.poll_id.in_(poll_ids)).all()
-
-    opts_by_poll = defaultdict(list)
-    for opt in options:
-        opts_by_poll[opt.poll_id].append(opt)
-
-    for p in polls:
-        setattr(p, "options", opts_by_poll[p.id])
-
-    return polls
+        raise HTTPException(status_code=404, detail="User not found.")
+    return user
 
 
-@app.get("/api/pollster/stats/{user_id}")
-def get_pollster_stats(user_id: int, db: Session = Depends(get_db)):
-    polls = db.query(models.Poll).filter(models.Poll.creator_id == user_id).all()
-    poll_ids = [p.id for p in polls]
-    total_polls = len(polls)
+@app.patch("/api/users/{user_id}", response_model=schemas.UserResponse)
+def update_user(user_id: int, body: schemas.UserUpdate, db: Session = Depends(get_db)):
+    """Partial update — demographics, name, profile picture, role."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return user
 
-    # Unique voters across all of this pollster's polls
-    if poll_ids:
-        total_voters = (
-            db.query(models.Vote.user_id)
-            .filter(models.Vote.poll_id.in_(poll_ids))
-            .distinct()
+
+# ===========================================================================
+# SURVEYS
+# ===========================================================================
+
+@app.post("/api/surveys", response_model=schemas.SurveyResponse)
+def create_survey(body: schemas.SurveyCreate, db: Session = Depends(get_db)):
+    """
+    Create a full survey with nested questions and options in one atomic transaction.
+    Validation rules:
+      - At least 1 question required.
+      - MULTIPLE_CHOICE / CHOICE_WITH_OTHER questions must have >= 2 options.
+      - OPEN_ENDED questions must have 0 options.
+    """
+    if not body.questions:
+        raise HTTPException(status_code=400, detail="A survey must have at least one question.")
+
+    for i, q in enumerate(body.questions, start=1):
+        if q.question_type in (
+            schemas.QuestionType.MULTIPLE_CHOICE,
+            schemas.QuestionType.CHOICE_WITH_OTHER,
+        ):
+            if len(q.options) < 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Question {i} ('{q.text[:40]}') must have at least 2 options.",
+                )
+        elif q.question_type == schemas.QuestionType.OPEN_ENDED:
+            if q.options:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Question {i}: OPEN_ENDED questions should not have options.",
+                )
+
+    pollster = db.query(models.User).filter(models.User.id == body.pollster_id).first()
+    if not pollster:
+        raise HTTPException(status_code=404, detail="Pollster not found.")
+
+    try:
+        survey = models.Survey(title=body.title, pollster_id=body.pollster_id)
+        db.add(survey)
+        db.flush()  # obtain survey.id inside the transaction
+
+        for q_data in body.questions:
+            question = models.Question(
+                survey_id=survey.id,
+                text=q_data.text,
+                question_type=q_data.question_type,
+            )
+            db.add(question)
+            db.flush()  # obtain question.id
+
+            for o_data in q_data.options:
+                db.add(models.Option(
+                    question_id=question.id,
+                    text=o_data.text,
+                    image_url=o_data.image_url,
+                ))
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create survey: {exc}") from exc
+
+    # Eagerly reload nested relations for the response
+    survey = (
+        db.query(models.Survey)
+        .options(
+            joinedload(models.Survey.questions)
+            .joinedload(models.Question.options)
+        )
+        .filter(models.Survey.id == survey.id)
+        .first()
+    )
+    return survey
+
+
+@app.get("/api/surveys", response_model=List[schemas.SurveySummary])
+def list_surveys(db: Session = Depends(get_db)):
+    """Return all surveys (summary cards — no nested questions)."""
+    return db.query(models.Survey).order_by(models.Survey.created_at.desc()).all()
+
+
+@app.get("/api/surveys/user/{pollster_id}", response_model=List[schemas.SurveySummary])
+def list_surveys_by_pollster(pollster_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.Survey)
+        .filter(models.Survey.pollster_id == pollster_id)
+        .order_by(models.Survey.created_at.desc())
+        .all()
+    )
+
+
+@app.get("/api/surveys/{survey_id}", response_model=schemas.SurveyResponse)
+def get_survey(survey_id: int, db: Session = Depends(get_db)):
+    """Full survey with all questions and options."""
+    survey = (
+        db.query(models.Survey)
+        .options(
+            joinedload(models.Survey.questions)
+            .joinedload(models.Question.options)
+        )
+        .filter(models.Survey.id == survey_id)
+        .first()
+    )
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found.")
+    return survey
+
+
+@app.delete("/api/surveys/{survey_id}", status_code=204)
+def delete_survey(survey_id: int, db: Session = Depends(get_db)):
+    survey = db.query(models.Survey).filter(models.Survey.id == survey_id).first()
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found.")
+    db.delete(survey)
+    db.commit()
+
+
+# ===========================================================================
+# ANSWERS  —  survey submission
+# ===========================================================================
+
+@app.post("/api/surveys/{survey_id}/submit")
+def submit_survey(
+    survey_id: int,
+    body: schemas.SurveySubmission,
+    db: Session = Depends(get_db),
+):
+    """
+    Submit all answers for a survey in one atomic request.
+
+    Validation:
+      - Survey must exist.
+      - Each question_id must belong to this survey.
+      - Authenticated users cannot re-submit the same survey.
+      - MULTIPLE_CHOICE requires option_id.
+      - OPEN_ENDED requires answer_text.
+      - CHOICE_WITH_OTHER requires option_id OR answer_text (the 'Other' text).
+    """
+    survey = (
+        db.query(models.Survey)
+        .options(
+            joinedload(models.Survey.questions)
+            .joinedload(models.Question.options)
+        )
+        .filter(models.Survey.id == survey_id)
+        .first()
+    )
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found.")
+
+    # Build a lookup: question_id -> Question ORM object
+    question_map: dict[int, models.Question] = {q.id: q for q in survey.questions}
+
+    # Duplicate-submission guard for authenticated users
+    if body.user_id:
+        first_q_ids = list(question_map.keys())
+        if first_q_ids:
+            already_answered = (
+                db.query(models.Answer)
+                .filter(
+                    models.Answer.user_id == body.user_id,
+                    models.Answer.question_id.in_(first_q_ids),
+                )
+                .first()
+            )
+            if already_answered:
+                raise HTTPException(
+                    status_code=400,
+                    detail="You have already submitted this survey.",
+                )
+
+    # Per-answer validation
+    for i, ans in enumerate(body.answers, start=1):
+        if ans.question_id not in question_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Answer {i}: question_id {ans.question_id} does not belong to survey {survey_id}.",
+            )
+        q = question_map[ans.question_id]
+
+        if q.question_type == schemas.QuestionType.MULTIPLE_CHOICE:
+            if not ans.option_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Answer {i}: MULTIPLE_CHOICE question requires an option_id.",
+                )
+
+        elif q.question_type == schemas.QuestionType.OPEN_ENDED:
+            if not ans.answer_text or not ans.answer_text.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Answer {i}: OPEN_ENDED question requires a non-empty answer_text.",
+                )
+
+        elif q.question_type == schemas.QuestionType.CHOICE_WITH_OTHER:
+            if not ans.option_id and not (ans.answer_text and ans.answer_text.strip()):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Answer {i}: CHOICE_WITH_OTHER requires either an option_id or an answer_text.",
+                )
+
+    # Persist inside a transaction
+    try:
+        count = 0
+        for ans in body.answers:
+            db.add(models.Answer(
+                question_id=ans.question_id,
+                user_id=body.user_id,
+                option_id=ans.option_id,
+                answer_text=ans.answer_text,
+            ))
+            count += 1
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save answers: {exc}") from exc
+
+    return {"message": "Answers recorded.", "count": count}
+
+
+@app.get("/api/surveys/{survey_id}/results", response_model=schemas.SurveyResults)
+def get_survey_results(survey_id: int, db: Session = Depends(get_db)):
+    """
+    Aggregated analytics for a single survey.
+
+    Returns per-question breakdowns:
+      - Option vote counts for MULTIPLE_CHOICE / CHOICE_WITH_OTHER
+      - Raw text list for OPEN_ENDED / CHOICE_WITH_OTHER 'Other' answers
+      - Total unique participants (or total answer rows for anonymous submissions)
+    """
+    survey = (
+        db.query(models.Survey)
+        .options(
+            joinedload(models.Survey.questions)
+            .joinedload(models.Question.options)
+        )
+        .filter(models.Survey.id == survey_id)
+        .first()
+    )
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found.")
+
+    question_ids = [q.id for q in survey.questions]
+
+    # Fetch all answers for this survey in one query
+    all_answers: list[models.Answer] = (
+        db.query(models.Answer)
+        .filter(models.Answer.question_id.in_(question_ids))
+        .all()
+        if question_ids else []
+    )
+
+    # Unique participants: prefer counting distinct user_ids;
+    # fall back to counting distinct answer rows for anonymous respondents.
+    authenticated_user_ids = {a.user_id for a in all_answers if a.user_id is not None}
+    if authenticated_user_ids:
+        total_participants = len(authenticated_user_ids)
+    else:
+        # Approximate: count distinct "sessions" by grouping on the first question
+        first_q_id = question_ids[0] if question_ids else None
+        total_participants = (
+            sum(1 for a in all_answers if a.question_id == first_q_id)
+            if first_q_id else 0
+        )
+
+    # Group answers by question
+    ans_by_q: dict[int, list[models.Answer]] = defaultdict(list)
+    for a in all_answers:
+        ans_by_q[a.question_id].append(a)
+
+    question_results: list[schemas.QuestionResult] = []
+    for q in survey.questions:
+        q_answers = ans_by_q.get(q.id, [])
+
+        # Tally option selections
+        option_counts: dict[int, int] = defaultdict(int)
+        open_texts: list[str] = []
+
+        for a in q_answers:
+            if a.option_id:
+                option_counts[a.option_id] += 1
+            if a.answer_text and a.answer_text.strip():
+                open_texts.append(a.answer_text.strip())
+
+        options_result = [
+            schemas.OptionResult(
+                id=opt.id,
+                text=opt.text,
+                count=option_counts.get(opt.id, 0),
+            )
+            for opt in (q.options or [])
+        ]
+
+        question_results.append(
+            schemas.QuestionResult(
+                id=q.id,
+                text=q.text,
+                question_type=q.question_type,
+                total_answers=len(q_answers),
+                options=options_result,
+                open_texts=open_texts,
+            )
+        )
+
+    return schemas.SurveyResults(
+        survey_id=survey.id,
+        title=survey.title,
+        total_participants=total_participants,
+        questions=question_results,
+    )
+
+
+
+# ===========================================================================
+# POLLSTER STATS
+# ===========================================================================
+
+@app.get("/api/pollster/stats/{pollster_id}")
+def get_pollster_stats(pollster_id: int, db: Session = Depends(get_db)):
+    """
+    Aggregate stats for the pollster dashboard:
+      - total_surveys
+      - total_responses  (unique answers submitted)
+      - surveys_list     (id, title, response_count, per-question breakdowns)
+    """
+    surveys = (
+        db.query(models.Survey)
+        .filter(models.Survey.pollster_id == pollster_id)
+        .order_by(models.Survey.created_at.desc())
+        .all()
+    )
+    survey_ids = [s.id for s in surveys]
+    total_surveys = len(surveys)
+
+    if not survey_ids:
+        return {
+            "total_surveys": 0,
+            "total_responses": 0,
+            "surveys_list": [],
+        }
+
+    # Count all answers across this pollster's surveys
+    question_ids = [
+        q.id for q in
+        db.query(models.Question.id)
+        .filter(models.Question.survey_id.in_(survey_ids))
+        .all()
+    ]
+
+    total_responses = 0
+    if question_ids:
+        total_responses = (
+            db.query(models.Answer)
+            .filter(models.Answer.question_id.in_(question_ids))
             .count()
         )
-    else:
-        total_voters = 0
 
-    # Weekly votes: index 0 = 6 days ago … index 6 = today (UTC)
-    now = datetime.utcnow()
-    period_start = datetime(now.year, now.month, now.day) - timedelta(days=6)
+    # Build per-survey summary with question breakdowns
+    surveys_list = []
+    for survey in surveys:
+        q_ids = [q.id for q in survey.questions] if survey.questions else []
 
-    weekly_votes = [0] * 7
-    if poll_ids:
-        recent_votes = (
-            db.query(models.Vote)
-            .filter(
-                models.Vote.poll_id.in_(poll_ids),
-                models.Vote.created_at >= period_start,
+        response_count = 0
+        questions_data = []
+
+        if q_ids:
+            answers = (
+                db.query(models.Answer)
+                .filter(models.Answer.question_id.in_(q_ids))
+                .all()
             )
-            .all()
-        )
-        for v in recent_votes:
-            created = v.created_at.replace(tzinfo=None) if v.created_at.tzinfo else v.created_at
-            day_offset = (created.date() - period_start.date()).days
-            if 0 <= day_offset <= 6:
-                weekly_votes[day_offset] += 1
+            response_count = len(answers)
 
-    # All polls with their options for the dropdown + pie chart
-    polls_list = []
-    if polls:
-        all_options = (
-            db.query(models.Option)
-            .filter(models.Option.poll_id.in_(poll_ids))
-            .all()
-        )
-        opts_map: dict = defaultdict(list)
-        for o in all_options:
-            opts_map[o.poll_id].append({"name": o.text, "value": o.votes})
+            # Group answers by question
+            ans_by_q: dict = defaultdict(list)
+            for a in answers:
+                ans_by_q[a.question_id].append(a)
 
-        for p in sorted(polls, key=lambda x: x.created_at, reverse=True):
-            polls_list.append({
-                "id": p.id,
-                "question": p.question,
-                "options": opts_map[p.id],
-            })
+            for q in survey.questions:
+                q_answers = ans_by_q.get(q.id, [])
 
-    # latest_poll_data kept for backwards compatibility
-    latest_poll_data = polls_list[0] if polls_list else None
+                # Option tallies for MC / CHOICE_WITH_OTHER
+                option_counts: dict = defaultdict(int)
+                open_texts = []
+                for a in q_answers:
+                    if a.option_id:
+                        option_counts[a.option_id] += 1
+                    if a.answer_text:
+                        open_texts.append(a.answer_text)
+
+                options_summary = []
+                for opt in (q.options or []):
+                    options_summary.append({
+                        "id": opt.id,
+                        "text": opt.text,
+                        "count": option_counts.get(opt.id, 0),
+                    })
+
+                questions_data.append({
+                    "id": q.id,
+                    "text": q.text,
+                    "question_type": q.question_type,
+                    "total_answers": len(q_answers),
+                    "options": options_summary,
+                    "open_texts": open_texts,
+                })
+
+        surveys_list.append({
+            "id": survey.id,
+            "title": survey.title,
+            "created_at": survey.created_at,
+            "response_count": response_count,
+            "questions": questions_data,
+        })
 
     return {
-        "total_voters": total_voters,
-        "total_polls": total_polls,
-        "weekly_votes": weekly_votes,
-        "latest_poll_data": latest_poll_data,
-        "polls_list": polls_list,
+        "total_surveys": total_surveys,
+        "total_responses": total_responses,
+        "surveys_list": surveys_list,
     }

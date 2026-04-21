@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useAuthStore } from "@/store/authStore"
 import { usePathname, useRouter } from "next/navigation"
 import {
   BarChart3,
@@ -43,6 +44,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
   const router = useRouter()
   const nav = role === "pollster" ? pollsterNav : userNav
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const user = useAuthStore(state => state.user)
 
   const sidebarContent = (
     <>
@@ -137,8 +139,33 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden">
-        {children}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative w-full">
+        {/* Desktop Top Profile Nav */}
+        <header className="hidden md:flex min-h-[4rem] items-center justify-end px-6 md:px-8 shrink-0">
+          {user && (
+            <div className="flex items-center gap-3 bg-secondary/20 pr-4 pl-1.5 py-1.5 rounded-full border border-border/40 shadow-sm transition-all hover:bg-secondary/40 hover:border-primary/30 cursor-default group">
+              {user.photoURL ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img 
+                  src={user.photoURL} 
+                  alt={user.displayName || "User Avatar"} 
+                  className="w-8 h-8 rounded-full ring-2 ring-transparent group-hover:ring-primary/40 object-cover transition-all" 
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs ring-2 ring-transparent group-hover:ring-primary/40 transition-all">
+                  {user.displayName?.charAt(0).toUpperCase() || "U"}
+                </div>
+              )}
+              <span className="text-sm font-semibold text-foreground tracking-tight drop-shadow-sm">
+                {user.displayName || user.email || "Kullanıcı"}
+              </span>
+            </div>
+          )}
+        </header>
+
+        <div className="flex-1">
+          {children}
+        </div>
       </main>
     </div>
   )

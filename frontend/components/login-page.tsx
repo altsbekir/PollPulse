@@ -1,230 +1,246 @@
 "use client"
 
-import { useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { BarChart3, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { BarChart3, Users, BarChart2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+import { useAuthStore } from "@/store/authStore"
 
 interface LoginPageProps {
   onLogin: (role: "pollster" | "user") => void
 }
 
+// Inline Google "G" SVG — no external dependency, perfectly matches Google brand
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        fill="#EA4335"
+      />
+    </svg>
+  )
+}
+
+const roles = [
+  {
+    id: "user" as const,
+    label: "Voter",
+    description: "Participate in polls",
+    icon: Users,
+  },
+  {
+    id: "pollster" as const,
+    label: "Pollster",
+    description: "Create & manage polls",
+    icon: BarChart2,
+  },
+]
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirectUrl = searchParams.get('redirect')
-  
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const { loginWithGoogle } = useAuthStore()
   const [role, setRole] = useState<"pollster" | "user">("user")
-  const [isRegistering, setIsRegistering] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-
-    if (isRegistering) {
-      setLoading(true)
-      try {
-        const backendRole = role === "pollster" ? "Pollster" : "Voter"
-        const res = await fetch(`${API_URL}/api/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, role: backendRole }),
-        })
-
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.detail || "Kayıt başarısız oldu.")
-        }
-
-        setIsRegistering(false)
-        setEmail("")
-        setPassword("")
-        setError("")
-      } catch (err: any) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    } else {
-      setLoading(true)
-      try {
-        const res = await fetch(`${API_URL}/api/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        })
-
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.detail || "Giriş başarısız oldu.")
-        }
-
-        const data = await res.json()
-        
-        // Save user to localStorage
-        localStorage.setItem("user", JSON.stringify(data.user))
-        
-        // Redirect based on role
-        if (redirectUrl) {
-          window.location.href = redirectUrl
-        } else if (data.user.role === "Pollster") {
-          router.push("/pollster")
-        } else {
-          router.push("/user")
-        }
-        
-        // Optional fallback to keep prop happy if needed by parent
-        if (onLogin) {
-          const userRole = data.user.role.toLowerCase() === "pollster" ? "pollster" : "user"
-          onLogin(userRole)
-        }
-      } catch (err: any) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      console.log("1. Initiating Firebase login...")
+      await loginWithGoogle(role === "pollster" ? "pollster" : "voter")
+      console.log("2. Firebase login successful!")
+      router.push(role === "pollster" ? "/pollster" : "/user")
+    } catch (error: any) {
+      console.error("FIREBASE/BACKEND ERROR:", error)
+      setError(error.message || "Sign-in failed. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      {/* Background glow */}
-      <div
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-        aria-hidden="true"
-      >
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-primary/10 blur-[120px]" />
-        <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full bg-accent/8 blur-[120px]" />
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 font-sans">
+      {/* Ambient glow blobs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute top-[-10%] left-[-5%] w-[520px] h-[520px] rounded-full bg-primary/[0.07] blur-[130px]" />
+        <div className="absolute bottom-[-10%] right-[-5%] w-[480px] h-[480px] rounded-full bg-accent/[0.06] blur-[130px]" />
       </div>
 
-      <div className="relative w-full max-w-md">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary">
-            <BarChart3 className="w-5 h-5 text-primary-foreground" />
+      <div className="relative w-full max-w-[420px] flex flex-col items-center gap-8">
+
+        {/* Logo lockup */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary shadow-lg shadow-primary/30">
+            <BarChart3 className="w-6 h-6 text-primary-foreground" strokeWidth={2.2} />
           </div>
-          <span className="text-2xl font-bold text-foreground tracking-tight">
-            PollPulse
-          </span>
+          <div className="text-center">
+            <p className="text-2xl font-bold tracking-tight text-foreground">PollPulse</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Real-time polling, simplified</p>
+          </div>
         </div>
 
         {/* Card */}
-        <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl">
-          <h1 className="text-xl font-semibold text-foreground mb-1">
-            {isRegistering ? "Hesap oluşturun" : "Tekrar hoş geldiniz"}
-          </h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            {isRegistering
-              ? "Ücretsiz hesabınızı oluşturmak için bilgilerinizi girin"
-              : "Devam etmek için hesabınıza giriş yapın"}
-          </p>
+        <div className="w-full rounded-2xl border border-border bg-card shadow-2xl shadow-black/40 overflow-hidden">
 
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 mb-4">
-              {error}
+          {/* Card header strip */}
+          <div className="px-8 pt-7 pb-6 border-b border-border">
+            <h1 className="text-lg font-semibold text-foreground tracking-tight text-balance">
+              Sign in to your account
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+              Choose your role, then continue with Google.
             </p>
-          )}
+          </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            {/* Email */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email" className="text-sm text-foreground">
-                E-posta
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="siz@ornek.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary h-10"
-              />
-            </div>
+          {/* Card body */}
+          <div className="px-8 py-7 flex flex-col gap-6">
 
-            {/* Password */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password" className="text-sm text-foreground">
-                Şifre
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary h-10"
-              />
-            </div>
+            {/* Role selector label */}
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                I am a...
+              </p>
 
-            {/* Role Selector (Only for Registration) */}
-            {isRegistering && (
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-sm text-foreground">Rol</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["pollster", "user"] as const).map((r) => (
+              {/* Segmented role toggle */}
+              <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Select your role">
+                {roles.map(({ id, label, description, icon: Icon }) => {
+                  const active = role === id
+                  return (
                     <button
-                      key={r}
+                      key={id}
                       type="button"
-                      onClick={() => setRole(r)}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setRole(id)}
                       className={cn(
-                        "flex items-center justify-center gap-2 h-10 rounded-lg border text-sm font-medium transition-all duration-150 capitalize",
-                        role === r
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-border bg-muted text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        "relative flex flex-col items-start gap-1.5 rounded-xl border px-4 py-3.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                        active
+                          ? "border-primary bg-primary/10 shadow-sm shadow-primary/20"
+                          : "border-border bg-muted/50 hover:border-border/80 hover:bg-muted"
                       )}
                     >
-                      <Zap
+                      {/* Active indicator dot */}
+                      <span
                         className={cn(
-                          "w-3.5 h-3.5",
-                          role === r ? "text-primary" : "text-muted-foreground"
+                          "absolute top-3 right-3 w-2 h-2 rounded-full transition-all duration-200",
+                          active ? "bg-primary scale-100" : "bg-muted-foreground/30 scale-75"
                         )}
+                        aria-hidden="true"
                       />
-                      {r === "pollster" ? "Anketör" : "Katılımcı"}
+
+                      <span
+                        className={cn(
+                          "flex items-center justify-center w-7 h-7 rounded-lg transition-colors duration-200",
+                          active
+                            ? "bg-primary/20 text-primary"
+                            : "bg-secondary text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      </span>
+
+                      <div>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold leading-none transition-colors duration-200",
+                            active ? "text-foreground" : "text-muted-foreground"
+                          )}
+                        >
+                          {label}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1 leading-tight">
+                          {description}
+                        </p>
+                      </div>
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">then</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            {/* Google Sign-In button */}
+            {error && (
+              <p className="text-xs text-destructive text-center -mb-2">{error}</p>
             )}
-
-            {/* Submit */}
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold mt-1 rounded-lg"
-            >
-              {loading
-                ? "İşleniyor..."
-                : isRegistering
-                ? "Kayıt Ol"
-                : "Giriş Yap"}
-            </Button>
-          </form>
-
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            {isRegistering ? "Zaten hesabınız var mı?" : "Hesabınız yok mu?"}{" "}
             <button
               type="button"
-              onClick={() => {
-                setIsRegistering(!isRegistering)
-                setError("")
-              }}
-              className="text-primary hover:underline font-medium"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className={cn(
+                "group relative w-full flex items-center justify-center gap-3 h-11 rounded-xl border border-border bg-secondary",
+                "text-sm font-semibold text-foreground",
+                "transition-all duration-200",
+                "hover:border-primary/40 hover:bg-secondary/80 hover:shadow-md hover:shadow-primary/10",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                "active:scale-[0.985]",
+                "disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+              )}
             >
-              {isRegistering ? "Giriş yapın" : "Ücretsiz başlayın"}
+              <GoogleIcon className="w-4.5 h-4.5 shrink-0" />
+              <span>{isLoading ? "Signing in..." : "Continue with Google"}</span>
+              {/* Hover shimmer */}
+              <span
+                className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.08), transparent)",
+                }}
+                aria-hidden="true"
+              />
             </button>
-          </p>
+          </div>
+
+          {/* Card footer */}
+          <div className="px-8 pb-6">
+            <p className="text-center text-[11px] text-muted-foreground leading-relaxed">
+              By signing in you agree to our{" "}
+              <button className="text-primary/80 hover:text-primary underline underline-offset-2 transition-colors">
+                Terms of Service
+              </button>{" "}
+              and{" "}
+              <button className="text-primary/80 hover:text-primary underline underline-offset-2 transition-colors">
+                Privacy Policy
+              </button>
+              .
+            </p>
+          </div>
         </div>
+
+        {/* Below-card note */}
+        <p className="text-xs text-muted-foreground text-center">
+          New to PollPulse?{" "}
+          <button className="text-primary font-medium hover:underline underline-offset-2 transition-colors">
+            Your account is created automatically.
+          </button>
+        </p>
+
       </div>
     </div>
   )

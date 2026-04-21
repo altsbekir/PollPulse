@@ -24,7 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+import { useAuthStore } from "@/store/authStore"
+import { api } from "@/lib/api"
+
 const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 
@@ -32,57 +34,42 @@ const PIE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4"]
 
 
 export default function PollsterDashboard() {
-  const [polls, setPolls] = useState<any[]>([])
+  const user = useAuthStore(state => state.user)
+  const [surveys, setSurveys] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  
+  // Stats remain mocked for the UI layout until updated
   const [statsData, setStatsData] = useState<any>(null)
   const [selectedPollId, setSelectedPollId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchPolls = async () => {
       try {
-        const userStr = localStorage.getItem("user")
-        if (!userStr) {
+        if (!user?.uid) {
           setLoading(false)
           return
         }
-        const user = JSON.parse(userStr)
 
-        const [pollsRes, statsRes] = await Promise.all([
-          fetch(`${API_URL}/api/polls/${user.id}`),
-          fetch(`${API_URL}/api/pollster/stats/${user.id}`),
-        ])
+        const surveysRes = await api.get(`/api/surveys/user/${user.uid}`)
+        setSurveys(surveysRes.data)
 
-        if (!pollsRes.ok) {
-          throw new Error("Anketler alınamadı")
-        }
-
-        const data = await pollsRes.json()
-        setPolls(data)
-
-        if (statsRes.ok) {
-          const stats = await statsRes.json()
-          setStatsData(stats)
-          if (stats.polls_list?.length) {
-            setSelectedPollId(String(stats.polls_list[0].id))
-          }
-        }
+        // Reset stats safely
+        setStatsData(null)
       } catch (err: any) {
-        setError(err.message)
+        setError(err.message || "Anketler alınamadı")
       } finally {
         setLoading(false)
       }
     }
 
     fetchPolls()
-  }, [])
+  }, [user])
 
-  const realTotalPolls = polls.length;
-  const realTotalVotes = polls.reduce((sum, poll) => {
-    const pollVotes = poll.options?.reduce((acc: number, opt: any) => acc + opt.votes, 0) || 0;
-    return sum + pollVotes;
-  }, 0);
+  const realTotalPolls = surveys.length;
+  // Fallback votes metric (UI only for now)
+  const realTotalVotes = 0;
 
   const DAY_NAMES = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"]
   const dynamicBarData = statsData?.weekly_votes
@@ -263,20 +250,37 @@ export default function PollsterDashboard() {
           </Link>
         </div>
         <div className="divide-y divide-border">
-          {loading && <p className="p-5 text-sm text-muted-foreground">Yükleniyor...</p>}
-          {error && <p className="p-5 text-sm text-destructive">{error}</p>}
-          {!loading && !error && polls.length === 0 && (
-            <p className="p-5 text-sm text-muted-foreground">Henüz anket oluşturmadınız.</p>
+          {loading && (
+            <div className="p-12 flex flex-col items-center justify-center text-muted-foreground gap-3">
+              <Clock className="w-8 h-8 animate-spin text-primary opacity-50" />
+              <p className="text-sm font-medium">Anketleriniz yükleniyor...</p>
+            </div>
           )}
-          {!loading && !error && polls.map((poll) => {
-            const totalVotes = poll.options?.reduce((sum: number, opt: any) => sum + opt.votes, 0) || 0;
-            const dateStr = new Date(poll.created_at).toLocaleDateString("tr-TR");
-            // Placeholder status mapping logic can be expanded in the future
+          {error && <p className="p-5 text-sm text-destructive">{error}</p>}
+          {!loading && !error && surveys.length === 0 && (
+            <div className="p-12 flex flex-col items-center justify-center gap-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
+                <BarChart3 className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">Henüz anketiniz yok</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mb-2">
+                Hedef kitlenizi anlamak ve veri toplamaya başlamak için ilk anketinizi oluşturun.
+              </p>
+              <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Link href="/pollster/create">
+                  <PlusCircle className="mr-2 w-4 h-4" />
+                  İlk Anketini Oluştur
+                </Link>
+              </Button>
+            </div>
+          )}
+          {!loading && !error && surveys.map((survey) => {
+            const dateStr = new Date(survey.created_at).toLocaleDateString("tr-TR");
             const status = "aktif";
             
             return (
             <div
-              key={poll.id}
+              key={survey.id}
               className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 hover:bg-muted/40 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -288,7 +292,7 @@ export default function PollsterDashboard() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{poll.question}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{survey.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {dateStr}
@@ -296,10 +300,6 @@ export default function PollsterDashboard() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:shrink-0 pl-5 sm:pl-0">
-                <span className="text-sm font-semibold text-foreground">
-                  {totalVotes.toLocaleString()}
-                  <span className="text-xs font-normal text-muted-foreground ml-1">oy</span>
-                </span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     status === "aktif"
@@ -310,13 +310,13 @@ export default function PollsterDashboard() {
                   {status}
                 </span>
                 <button
-                  onClick={() => handleCopy(poll.id)}
+                  onClick={() => handleCopy(survey.id)}
                   className="text-xs px-2.5 py-1 rounded-md bg-secondary/50 text-secondary-foreground hover:bg-secondary transition-colors font-medium border border-border"
                 >
-                  {copiedId === poll.id ? "✅ Kopyalandı!" : "🔗 Linki Kopyala"}
+                  {copiedId === survey.id ? "✅ Kopyalandı!" : "🔗 Linki Kopyala"}
                 </button>
                 <Link
-                  href={`/pollster/results?poll=${poll.id}`}
+                  href={`/pollster/results?poll=${survey.id}`}
                   className="text-xs text-primary hover:underline font-medium"
                 >
                   Görüntüle
