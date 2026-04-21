@@ -6,6 +6,7 @@ import { PlusCircle, Trash2, Sparkles, Send, Image as ImageIcon, Loader2, Plus }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
 import { useAuthStore } from "@/store/authStore"
 import { toast } from "sonner"
@@ -39,6 +40,7 @@ export default function CreatePollForm() {
   
   const [visibility, setVisibility] = useState("public")
   const [duration, setDuration] = useState("unlimited")
+  const [isAnonymous, setIsAnonymous] = useState(false)
   
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -188,6 +190,7 @@ export default function CreatePollForm() {
         title: title, 
         pollster_id: Number(user.uid),
         image_url: imageUrl || undefined,
+        is_anonymous: isAnonymous,
         questions: questions.map(q => ({
           text: q.text,
           question_type: q.type,
@@ -240,6 +243,29 @@ export default function CreatePollForm() {
                 required
                 className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary h-11 text-base font-medium"
               />
+           </div>
+
+           <div
+             className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-muted/30 px-4 py-3.5"
+             role="group"
+             aria-labelledby="survey-anonymous-label"
+           >
+             <div className="min-w-0 flex-1 pr-0 sm:pr-4">
+               <Label
+                 id="survey-anonymous-label"
+                 htmlFor="survey-is-anonymous"
+                 className="text-sm font-semibold text-foreground leading-snug cursor-pointer"
+               >
+                 Anonymous Survey (Participants&apos; identities will not be visible to you)
+               </Label>
+             </div>
+             <Switch
+               id="survey-is-anonymous"
+               checked={isAnonymous}
+               onCheckedChange={setIsAnonymous}
+               aria-labelledby="survey-anonymous-label"
+               className="shrink-0 sm:mt-0 mt-1 self-start sm:self-center"
+             />
            </div>
 
            <div className="flex flex-col gap-3">

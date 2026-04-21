@@ -1,10 +1,10 @@
 import DashboardLayout from "@/components/dashboard-layout"
-import PollResultsView from "@/components/poll-results-view"
+import SurveyResultsList from "@/components/survey-results-list"
 
 export default function UserResultsPage() {
   return (
     <DashboardLayout role="user">
-      <PollResultsView />
+      <SurveyResultsList />
     </DashboardLayout>
   )
 }

@@ -316,7 +316,7 @@ export default function PollsterDashboard() {
                   {copiedId === survey.id ? "✅ Kopyalandı!" : "🔗 Linki Kopyala"}
                 </button>
                 <Link
-                  href={`/pollster/results?poll=${survey.id}`}
+                  href={`/dashboard/surveys/${survey.id}/results`}
                   className="text-xs text-primary hover:underline font-medium"
                 >
                   Görüntüle
